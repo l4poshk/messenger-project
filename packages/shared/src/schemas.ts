@@ -80,16 +80,16 @@ export const editMessageSchema = z.object({
 // ── Env validation ──
 
 export const serverEnvSchema = z.object({
-  DATABASE_URL: z.string().url(),
-  REDIS_URL: z.string().url(),
+  DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
+  REDIS_URL: z.string().min(1, 'REDIS_URL is required'),
   JWT_ACCESS_SECRET: z.string().min(16),
   JWT_REFRESH_SECRET: z.string().min(16),
-  R2_ACCOUNT_ID: z.string().min(1),
-  R2_ACCESS_KEY_ID: z.string().min(1),
-  R2_SECRET_ACCESS_KEY: z.string().min(1),
-  R2_BUCKET_NAME: z.string().min(1),
-  R2_PUBLIC_URL: z.string().url(),
-  CLIENT_URL: z.string().url(),
+  R2_ACCOUNT_ID: z.string().default(''),
+  R2_ACCESS_KEY_ID: z.string().default(''),
+  R2_SECRET_ACCESS_KEY: z.string().default(''),
+  R2_BUCKET_NAME: z.string().default(''),
+  R2_PUBLIC_URL: z.string().default(''),
+  CLIENT_URL: z.string().min(1, 'CLIENT_URL is required'),
   PORT: z.coerce.number().default(4000),
 });
 
