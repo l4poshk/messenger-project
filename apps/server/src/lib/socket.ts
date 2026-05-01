@@ -62,15 +62,17 @@ export function initSocket(server: HttpServer) {
       content: string;
       type: 'TEXT' | 'IMAGE';
       topicId?: string;
+      fileUrl?: string;
     }) => {
       try {
         const message = await prisma.message.create({
           data: {
             chatId: data.chatId,
             senderId: userId,
-            content: data.content,
+            content: data.content || '',
             type: data.type || 'TEXT',
-            ...(data.topicId ? { topicId: data.topicId } : {})
+            ...(data.topicId ? { topicId: data.topicId } : {}),
+            ...(data.fileUrl ? { fileUrl: data.fileUrl } : {}),
           },
           include: {
             sender: {

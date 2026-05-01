@@ -14,6 +14,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth.routes';
 import { chatRouter } from './routes/chat.routes';
 import { userRouter } from './routes/user.routes';
+import { uploadRouter } from './routes/upload.routes';
 
 // ── App setup ──
 
@@ -48,6 +49,7 @@ app.get('/api/health', (_req, res) => {
 app.use('/api/auth', authRouter);
 app.use('/api/users', userRouter);
 app.use('/api/chats', chatRouter);
+app.use('/api/upload', uploadRouter);
 
 // ── Global error handler (must be last) ──
 

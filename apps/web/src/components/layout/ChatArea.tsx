@@ -31,8 +31,12 @@ export default function ChatArea() {
   const [content, setContent] = useState('');
   const [activeTopicId, setActiveTopicId] = useState<string | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isSupergroup = (activeChat as any)?.type === 'SUPERGROUP';
   const myMembership = (activeChat as any)?.members?.find(
@@ -94,39 +98,106 @@ export default function ChatArea() {
     return chat.name || 'Group';
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
+  // ── File selection ──
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    if (!content.trim()) {
-      console.warn('[Chat] Empty message, ignoring');
+    if (!file.type.startsWith('image/')) {
+      alert('Only images are supported');
       return;
     }
+
+    setImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const clearImagePreview = () => {
+    setImagePreview(null);
+    setImageFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // ── Upload image to R2 ──
+  const uploadImage = async (): Promise<string | null> => {
+    if (!imageFile) return null;
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', imageFile);
+
+      const token = useAuthStore.getState().accessToken;
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/upload/image`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+
+      const json = await res.json();
+      if (json.error) {
+        console.error('[Upload] Error:', json.error);
+        return null;
+      }
+      return json.data?.url || null;
+    } catch (err) {
+      console.error('[Upload] Failed:', err);
+      return null;
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  // ── Send message ──
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const hasText = content.trim().length > 0;
+    const hasImage = !!imageFile;
+
+    if (!hasText && !hasImage) return;
     if (!activeChatId) {
       console.error('[Chat] No active chat selected');
       return;
     }
-    if (!socket) {
-      console.error('[Chat] Socket is null! Is it connected?', useSocketStore.getState().isConnected);
-      return;
-    }
-    if (!socket.connected) {
-      console.error('[Chat] Socket exists but NOT connected. State:', socket.disconnected);
+    if (!socket || !socket.connected) {
+      console.error('[Chat] Socket not connected');
       return;
     }
 
     try {
+      // If there's an image, upload first
+      let fileUrl: string | undefined;
+      if (hasImage) {
+        const url = await uploadImage();
+        if (url) {
+          fileUrl = url;
+        } else {
+          console.error('[Chat] Image upload failed');
+          return;
+        }
+      }
+
       const payload = {
         chatId: activeChatId,
-        content: content.trim(),
-        type: 'TEXT' as const,
-        ...(activeTopicId ? { topicId: activeTopicId } : {})
+        content: hasText ? content.trim() : (fileUrl ? '' : ''),
+        type: fileUrl ? 'IMAGE' : 'TEXT',
+        ...(fileUrl ? { fileUrl } : {}),
+        ...(activeTopicId ? { topicId: activeTopicId } : {}),
       };
-      console.log('[Chat] 📤 Sending message:', payload);
+
+      console.log('[Chat] 📤 Sending:', payload);
       socket.emit('message:send', payload);
       setContent('');
+      clearImagePreview();
       socket.emit('typing:stop', activeChatId);
     } catch (err) {
-      console.error('[Chat] Failed to send message:', err);
+      console.error('[Chat] Failed to send:', err);
     }
   };
 
@@ -199,6 +270,7 @@ export default function ChatArea() {
         {messages.map((msg, idx) => {
           const isOwn = msg.senderId === userId;
           const showAvatar = idx === 0 || messages[idx - 1].senderId !== msg.senderId;
+          const isImage = msg.type === 'IMAGE' && (msg as any).fileUrl;
 
           return (
             <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fade-in`}>
@@ -219,13 +291,40 @@ export default function ChatArea() {
                       {msg.sender?.username}
                     </p>
                   )}
-                  <div className={`px-4 py-2 rounded-2xl text-sm ${
-                    isOwn
-                      ? 'bg-msg-outgoing text-msg-outgoing-text rounded-tr-none'
-                      : 'bg-elevated text-text-primary rounded-tl-none'
-                  }`}>
-                    {msg.content}
-                  </div>
+
+                  {/* Image message */}
+                  {isImage ? (
+                    <div className={`rounded-2xl overflow-hidden ${
+                      isOwn ? 'rounded-tr-none' : 'rounded-tl-none'
+                    }`}>
+                      <img
+                        src={(msg as any).fileUrl}
+                        alt="Shared image"
+                        className="max-w-sm max-h-80 object-cover rounded-2xl cursor-pointer hover:opacity-90 transition-opacity"
+                        loading="lazy"
+                        onClick={() => window.open((msg as any).fileUrl, '_blank')}
+                      />
+                      {msg.content && (
+                        <div className={`px-4 py-1.5 text-sm ${
+                          isOwn
+                            ? 'bg-msg-outgoing text-msg-outgoing-text'
+                            : 'bg-elevated text-text-primary'
+                        }`}>
+                          {msg.content}
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Text message */
+                    <div className={`px-4 py-2 rounded-2xl text-sm ${
+                      isOwn
+                        ? 'bg-msg-outgoing text-msg-outgoing-text rounded-tr-none'
+                        : 'bg-elevated text-text-primary rounded-tl-none'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  )}
+
                   <div className={`text-[9px] text-text-hint mt-1 ${isOwn ? 'text-right' : 'text-left'}`}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </div>
@@ -236,25 +335,72 @@ export default function ChatArea() {
         })}
       </div>
 
+      {/* Image preview */}
+      {imagePreview && (
+        <div className="px-4 py-2 border-t border-border bg-secondary/50">
+          <div className="relative inline-block">
+            <img
+              src={imagePreview}
+              alt="Preview"
+              className="h-20 rounded-lg object-cover"
+            />
+            <button
+              onClick={clearImagePreview}
+              className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-danger text-white flex items-center justify-center text-xs hover:bg-red-600 transition-colors"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className="px-4 py-3 border-t border-border bg-primary">
         <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+
+          {/* Attachment button */}
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-elevated transition-colors shrink-0"
+            title="Attach image"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" />
+            </svg>
+          </button>
+
+          {/* Text input */}
           <input
             type="text"
             value={content}
             onChange={(e) => setContent(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={activeTopicId ? `Message in #topic...` : 'Type a message...'}
+            placeholder={activeTopicId ? 'Message in #topic...' : 'Type a message...'}
             className="flex-1 bg-elevated border-0 rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30"
           />
+
+          {/* Send button */}
           <button
             type="submit"
-            disabled={!content.trim()}
-            className="w-10 h-10 rounded-full bg-accent text-accent-dark flex items-center justify-center transition-all hover:bg-accent-hover disabled:opacity-50 disabled:grayscale"
+            disabled={(!content.trim() && !imageFile) || uploading}
+            className="w-10 h-10 rounded-full bg-accent text-accent-dark flex items-center justify-center transition-all hover:bg-accent-hover disabled:opacity-50 disabled:grayscale shrink-0"
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-            </svg>
+            {uploading ? (
+              <div className="w-4 h-4 border-2 border-accent-dark border-t-transparent rounded-full animate-spin" />
+            ) : (
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+              </svg>
+            )}
           </button>
         </form>
       </div>
