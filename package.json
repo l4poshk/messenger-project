@@ -1,0 +1,27 @@
+{
+  "name": "messenger",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "dev:web": "turbo run dev --filter=web",
+    "dev:server": "turbo run dev --filter=server",
+    "db:generate": "turbo run db:generate --filter=server",
+    "db:push": "turbo run db:push --filter=server",
+    "db:migrate": "turbo run db:migrate --filter=server",
+    "db:studio": "turbo run db:studio --filter=server"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "npm@10.0.0"
+}

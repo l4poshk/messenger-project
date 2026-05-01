@@ -1,0 +1,156 @@
+// ──────────────────────────────────────────────────────────
+// Messenger — Prisma Schema
+// PostgreSQL, all tables from specification
+// ──────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ── Enums ──
+
+enum ChatType {
+  DIRECT
+  GROUP
+  SUPERGROUP
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+// ── Models ──
+
+model User {
+  id          String    @id @default(cuid())
+  username    String    @unique
+  email       String    @unique
+  password    String
+  avatar      String?
+  description String?
+  status      String?   // custom status text
+  lastSeen    DateTime?
+  createdAt   DateTime  @default(now())
+
+  sentMessages  Message[]
+  memberships   Member[]
+  sessions      Session[]
+  notifications Notification[]
+
+  @@index([username])
+  @@index([email])
+  @@map("users")
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  type        ChatType
+  name        String?
+  avatar      String?
+  description String?
+  createdAt   DateTime @default(now())
+
+  members  Member[]
+  messages Message[]
+  topics   Topic[]
+
+  @@map("chats")
+}
+
+model Topic {
+  id        String   @id @default(cuid())
+  chatId    String
+  name      String
+  createdAt DateTime @default(now())
+
+  chat     Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@index([chatId])
+  @@map("topics")
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  chatId    String
+  topicId   String?
+  senderId  String
+  type      MessageType @default(TEXT)
+  content   String?
+  fileUrl   String?
+  fileName  String?
+  fileSize  Int?
+  duration  Int?        // audio/video duration in seconds
+  replyToId String?
+  createdAt DateTime    @default(now())
+  editedAt  DateTime?
+
+  chat    Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  topic   Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  sender  User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo Message? @relation("Reply", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies Message[] @relation("Reply")
+
+  @@index([chatId, createdAt])
+  @@index([topicId, createdAt])
+  @@index([senderId])
+  @@map("messages")
+}
+
+model Member {
+  id       String     @id @default(cuid())
+  chatId   String
+  userId   String
+  role     MemberRole @default(MEMBER)
+  joinedAt DateTime   @default(now())
+
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@index([userId])
+  @@map("members")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@map("notifications")
+}
