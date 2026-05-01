@@ -10,6 +10,7 @@ import IconNav from '@/components/layout/IconNav';
 import Sidebar from '@/components/layout/Sidebar';
 import ChatArea from '@/components/layout/ChatArea';
 import NewChatModal from '@/components/modals/NewChatModal';
+import CallModal from '@/components/call/CallModal';
 import { useSocketStore } from '@/store/socketStore';
 
 export default function HomePage() {
@@ -36,6 +37,7 @@ export default function HomePage() {
 
       {/* Modals */}
       <NewChatModal />
+      <CallModal />
     </div>
   );
 }

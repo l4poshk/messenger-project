@@ -111,6 +111,23 @@ export function initSocket(server: HttpServer) {
       });
     });
 
+    // ── WebRTC Signaling ──
+    socket.on('call:offer', (payload: any) => {
+      socket.to(`chat:${payload.chatId}`).emit('call:offer', payload);
+    });
+
+    socket.on('call:answer', (payload: any) => {
+      socket.to(`chat:${payload.chatId}`).emit('call:answer', payload);
+    });
+
+    socket.on('call:ice-candidate', (payload: any) => {
+      socket.to(`chat:${payload.chatId}`).emit('call:ice-candidate', payload);
+    });
+
+    socket.on('call:end', (payload: { chatId: string }) => {
+      socket.to(`chat:${payload.chatId}`).emit('call:end');
+    });
+
     socket.on('disconnect', () => {
       logger.info(`🔌 Socket disconnected: ${username}`);
     });

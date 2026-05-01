@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useMessageStore } from '@/store/messageStore';
 import { useSocketStore } from '@/store/socketStore';
+import { useCallStore } from '@/store/callStore';
 import { api } from '@/lib/api';
 import TopicBar from '@/components/chat/TopicBar';
 import AudioPlayer from '@/components/chat/AudioPlayer';
@@ -248,6 +249,20 @@ export default function ChatArea() {
             )}
           </div>
         </div>
+
+        {/* Call Button (only for DIRECT chats, or just generically) */}
+        {activeChat?.type === 'DIRECT' && (
+          <button
+            onClick={() => useCallStore.getState().setOutgoingCall(activeChatId)}
+            className="w-10 h-10 rounded-full flex items-center justify-center text-text-muted hover:text-accent hover:bg-accent/10 transition-colors shrink-0 ml-4"
+            title="Video Call"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"></polygon>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            </svg>
+          </button>
+        )}
       </header>
 
       {/* Topic Bar (only for supergroups) */}
