@@ -16,8 +16,10 @@
         "name": "next"
       }
     ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "noEmit": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "skipLibCheck": true
   },
   "include": [
     "next-env.d.ts",
