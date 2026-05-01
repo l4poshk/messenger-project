@@ -10,6 +10,7 @@ import { env } from './lib/env';
 import { logger } from './lib/logger';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth.routes';
+import { chatRouter } from './routes/chat.routes';
 
 // ── App setup ──
 
@@ -42,6 +43,7 @@ app.get('/api/health', (_req, res) => {
 // ── Routes ──
 
 app.use('/api/auth', authRouter);
+app.use('/api/chats', chatRouter);
 
 // Future routes will be added here:
 // app.use('/api/users', requireAuth, userRouter);

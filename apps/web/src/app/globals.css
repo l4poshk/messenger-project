@@ -1,3 +1,81 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@layer base {
+  * {
+    @apply box-border;
+  }
+
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-primary text-text-primary font-sans antialiased;
+  }
+
+  /* ── Custom scrollbar ── */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-border-light;
+  }
+
+  /* Firefox scrollbar */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2a2a2e transparent;
+  }
+}
+
+@layer components {
+  /* ── Input fields ── */
+  .input-field {
+    @apply w-full rounded-lg bg-elevated border border-border px-4 py-3
+           text-text-primary placeholder-text-hint text-sm
+           outline-none transition-all duration-200
+           focus:border-accent focus:ring-1 focus:ring-accent/30;
+  }
+
+  /* ── Primary button ── */
+  .btn-primary {
+    @apply w-full rounded-lg bg-accent px-4 py-3
+           text-accent-dark font-semibold text-sm
+           transition-all duration-200
+           hover:bg-accent-hover active:scale-[0.98]
+           disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100;
+  }
+
+  /* ── Ghost button ── */
+  .btn-ghost {
+    @apply rounded-lg px-4 py-2
+           text-text-muted text-sm
+           transition-all duration-200
+           hover:bg-elevated hover:text-text-primary;
+  }
+
+  /* ── Error text ── */
+  .error-text {
+    @apply text-danger text-xs mt-1 animate-fade-in;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
