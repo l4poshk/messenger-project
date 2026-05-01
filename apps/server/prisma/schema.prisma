@@ -96,6 +96,7 @@ model Message {
   fileName  String?
   fileSize  Int?
   duration  Int?        // audio/video duration in seconds
+  waveform  Float[]     // array of 0-1 values for audio visualization
   replyToId String?
   createdAt DateTime    @default(now())
   editedAt  DateTime?

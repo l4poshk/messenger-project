@@ -60,9 +60,11 @@ export function initSocket(server: HttpServer) {
     socket.on('message:send', async (data: {
       chatId: string;
       content: string;
-      type: 'TEXT' | 'IMAGE';
+      type: 'TEXT' | 'IMAGE' | 'AUDIO';
       topicId?: string;
       fileUrl?: string;
+      duration?: number;
+      waveform?: number[];
     }) => {
       try {
         const message = await prisma.message.create({
@@ -73,6 +75,8 @@ export function initSocket(server: HttpServer) {
             type: data.type || 'TEXT',
             ...(data.topicId ? { topicId: data.topicId } : {}),
             ...(data.fileUrl ? { fileUrl: data.fileUrl } : {}),
+            ...(data.duration ? { duration: Math.round(data.duration) } : {}),
+            ...(data.waveform && data.waveform.length > 0 ? { waveform: data.waveform } : {}),
           },
           include: {
             sender: {

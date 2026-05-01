@@ -69,6 +69,7 @@ export interface Message {
   fileName: string | null;
   fileSize: number | null;
   duration: number | null;
+  waveform: number[] | null;
   replyToId: string | null;
   createdAt: string;
   editedAt: string | null;

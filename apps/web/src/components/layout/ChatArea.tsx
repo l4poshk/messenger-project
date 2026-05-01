@@ -7,6 +7,8 @@ import { useMessageStore } from '@/store/messageStore';
 import { useSocketStore } from '@/store/socketStore';
 import { api } from '@/lib/api';
 import TopicBar from '@/components/chat/TopicBar';
+import AudioPlayer from '@/components/chat/AudioPlayer';
+import VoiceRecorder from '@/components/chat/VoiceRecorder';
 import type { Message, Topic } from '@messenger/shared';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -271,6 +273,7 @@ export default function ChatArea() {
           const isOwn = msg.senderId === userId;
           const showAvatar = idx === 0 || messages[idx - 1].senderId !== msg.senderId;
           const isImage = msg.type === 'IMAGE' && (msg as any).fileUrl;
+          const isAudio = msg.type === 'AUDIO' && (msg as any).fileUrl;
 
           return (
             <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'} animate-fade-in`}>
@@ -292,8 +295,16 @@ export default function ChatArea() {
                     </p>
                   )}
 
-                  {/* Image message */}
-                  {isImage ? (
+                  {/* Audio message */}
+                  {isAudio ? (
+                    <AudioPlayer
+                      src={(msg as any).fileUrl}
+                      duration={msg.duration}
+                      waveform={(msg as any).waveform}
+                      isOwn={isOwn}
+                    />
+                  ) : isImage ? (
+                    /* Image message */
                     <div className={`rounded-2xl overflow-hidden ${
                       isOwn ? 'rounded-tr-none' : 'rounded-tl-none'
                     }`}>
@@ -388,20 +399,39 @@ export default function ChatArea() {
             className="flex-1 bg-elevated border-0 rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30"
           />
 
-          {/* Send button */}
-          <button
-            type="submit"
-            disabled={(!content.trim() && !imageFile) || uploading}
-            className="w-10 h-10 rounded-full bg-accent text-accent-dark flex items-center justify-center transition-all hover:bg-accent-hover disabled:opacity-50 disabled:grayscale shrink-0"
-          >
-            {uploading ? (
-              <div className="w-4 h-4 border-2 border-accent-dark border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
-              </svg>
-            )}
-          </button>
+          {/* Voice recorder (shows when no text typed) */}
+          {!content.trim() && !imageFile ? (
+            <VoiceRecorder
+              onSend={(fileUrl, dur, wf) => {
+                if (!activeChatId || !socket?.connected) return;
+                socket.emit('message:send', {
+                  chatId: activeChatId,
+                  content: '',
+                  type: 'AUDIO',
+                  fileUrl,
+                  duration: dur,
+                  waveform: wf,
+                  ...(activeTopicId ? { topicId: activeTopicId } : {}),
+                });
+              }}
+              disabled={!socket?.connected}
+            />
+          ) : (
+            /* Send button */
+            <button
+              type="submit"
+              disabled={(!content.trim() && !imageFile) || uploading}
+              className="w-10 h-10 rounded-full bg-accent text-accent-dark flex items-center justify-center transition-all hover:bg-accent-hover disabled:opacity-50 disabled:grayscale shrink-0"
+            >
+              {uploading ? (
+                <div className="w-4 h-4 border-2 border-accent-dark border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" />
+                </svg>
+              )}
+            </button>
+          )}
         </form>
       </div>
     </main>
