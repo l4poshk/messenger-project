@@ -3,14 +3,17 @@
 // ──────────────────────────────────────────────
 
 import express from 'express';
+import { createServer } from 'http';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 
 import { env } from './lib/env';
 import { logger } from './lib/logger';
+import { initSocket } from './lib/socket';
 import { errorHandler } from './middleware/errorHandler';
 import { authRouter } from './routes/auth.routes';
 import { chatRouter } from './routes/chat.routes';
+import { userRouter } from './routes/user.routes';
 
 // ── App setup ──
 
@@ -43,13 +46,8 @@ app.get('/api/health', (_req, res) => {
 // ── Routes ──
 
 app.use('/api/auth', authRouter);
+app.use('/api/users', userRouter);
 app.use('/api/chats', chatRouter);
-
-// Future routes will be added here:
-// app.use('/api/users', requireAuth, userRouter);
-// app.use('/api/chats', requireAuth, chatRouter);
-// app.use('/api/upload', requireAuth, uploadRouter);
-// app.use('/api/notifications', requireAuth, notificationRouter);
 
 // ── Global error handler (must be last) ──
 
@@ -57,7 +55,10 @@ app.use(errorHandler);
 
 // ── Start server ──
 
-app.listen(env.PORT, () => {
+const httpServer = createServer(app);
+initSocket(httpServer);
+
+httpServer.listen(env.PORT, () => {
   logger.info(`🚀 Server running on http://localhost:${env.PORT}`);
   logger.info(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`   Client URL:  ${env.CLIENT_URL}`);

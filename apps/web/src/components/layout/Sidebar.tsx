@@ -1,37 +1,52 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
+import { useUiStore } from '@/store/uiStore';
 import { api } from '@/lib/api';
-import type { Chat, User } from '@messenger/shared';
+import type { Chat } from '@messenger/shared';
 
 export default function Sidebar() {
   const user = useAuthStore((s) => s.user);
-  const { chats, setChats, activeChatId, setActiveChat } = useChatStore();
+  // ── Подписываемся на отдельные селекторы, а не деструктуризация стора ──
+  const chats = useChatStore((s) => s.chats);
+  const activeChatId = useChatStore((s) => s.activeChatId);
+  const setChats = useChatStore((s) => s.setChats);
+  const setActiveChat = useChatStore((s) => s.setActiveChat);
+  const openModal = useUiStore((s) => s.openModal);
 
   useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
     const fetchChats = async () => {
       const result = await api.get<Chat[]>('/chats');
-      if (result.data) setChats(result.data);
+      if (result.data && !cancelled) setChats(result.data);
     };
-    if (user) fetchChats();
-  }, [user, setChats]);
+    fetchChats();
 
-  // Хелпер для получения имени чата (если DIRECT — имя собеседника)
-  const getChatName = (chat: any) => {
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]); // ← зависим только от id, не от объекта user
+
+  const getChatName = useCallback((chat: any) => {
     if (chat.type === 'DIRECT') {
-      const otherMember = chat.members.find((m: any) => m.userId !== user?.id);
-      return otherMember?.user.username || 'Direct Chat';
+      const otherMember = chat.members?.find((m: any) => m.userId !== user?.id);
+      return otherMember?.user?.username || 'Direct Chat';
     }
     return chat.name || 'Group Chat';
-  };
+  }, [user?.id]);
 
   return (
     <aside className="flex flex-col w-sidebar bg-secondary border-r border-border shrink-0">
       <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold text-text-primary">Chats</h2>
-        <button className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:bg-elevated hover:text-text-primary transition-colors">
+        <button
+          onClick={() => openModal('create-chat')}
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:bg-elevated hover:text-text-primary transition-colors"
+          title="New chat"
+        >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
           </svg>
