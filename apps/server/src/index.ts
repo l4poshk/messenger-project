@@ -16,6 +16,7 @@ import { chatRouter } from './routes/chat.routes';
 import { userRouter } from './routes/user.routes';
 import { uploadRouter } from './routes/upload.routes';
 import { notificationRouter } from './routes/notification.routes';
+import { contactRouter } from './routes/contact.routes';
 
 // ── App setup ──
 
@@ -52,6 +53,7 @@ app.use('/api/users', userRouter);
 app.use('/api/chats', chatRouter);
 app.use('/api/upload', uploadRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/contacts', contactRouter);
 
 // ── Global error handler (must be last) ──
 

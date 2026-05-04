@@ -51,6 +51,8 @@ model User {
   memberships   Member[]
   sessions      Session[]
   notifications Notification[]
+  contacts      Contact[] @relation("owner")
+  contactOf     Contact[] @relation("contact")
 
   @@index([username])
   @@index([email])
@@ -155,4 +157,18 @@ model Notification {
 
   @@index([userId, read])
   @@map("notifications")
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  ownerId   String
+  contactId String
+  createdAt DateTime @default(now())
+
+  owner   User @relation("owner", fields: [ownerId], references: [id], onDelete: Cascade)
+  contact User @relation("contact", fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, contactId])
+  @@index([ownerId])
+  @@map("contacts")
 }

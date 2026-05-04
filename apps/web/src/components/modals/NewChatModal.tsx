@@ -1,15 +1,15 @@
 'use client';
 
 // ──────────────────────────────────────────────
-// New Chat Modal — поиск пользователей, создание
-// DIRECT / GROUP / SUPERGROUP чатов
+// New Chat Modal — create DIRECT / GROUP / SUPERGROUP
+// chats FROM your contacts list only
 // ──────────────────────────────────────────────
 
-import { useState, useEffect, useRef } from 'react';
-import { api } from '@/lib/api';
+import { useState, useEffect } from 'react';
 import { useChatStore } from '@/store/chatStore';
 import { useUiStore } from '@/store/uiStore';
-import type { User, Chat } from '@messenger/shared';
+import { useContactStore, type ContactUser } from '@/store/contactStore';
+import { api } from '@/lib/api';
 
 type ChatMode = 'direct' | 'group' | 'supergroup';
 
@@ -19,43 +19,36 @@ export default function NewChatModal() {
   const setChats = useChatStore((s) => s.setChats);
   const setActiveChat = useChatStore((s) => s.setActiveChat);
   const chats = useChatStore((s) => s.chats);
+  const { contacts, fetchContacts } = useContactStore();
 
   const [mode, setMode] = useState<ChatMode>('direct');
-  const [search, setSearch] = useState('');
-  const [results, setResults] = useState<User[]>([]);
-  const [selected, setSelected] = useState<User[]>([]);
+  const [filter, setFilter] = useState('');
+  const [selected, setSelected] = useState<ContactUser[]>([]);
   const [groupName, setGroupName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const isOpen = activeModal === 'create-chat' || activeModal === 'create-group';
 
-  // Сбрасываем при открытии
+  // Reset on open + fetch contacts
   useEffect(() => {
     if (isOpen) {
-      setSearch('');
-      setResults([]);
+      setFilter('');
       setSelected([]);
       setGroupName('');
       setError('');
       if (activeModal === 'create-group') setMode('group');
       else setMode('direct');
-      setTimeout(() => searchRef.current?.focus(), 100);
+      fetchContacts();
     }
-  }, [isOpen, activeModal]);
+  }, [isOpen, activeModal, fetchContacts]);
 
-  // Поиск пользователей
-  useEffect(() => {
-    if (!search.trim()) { setResults([]); return; }
-    const timeout = setTimeout(async () => {
-      const res = await api.get<User[]>(`/users/search?q=${encodeURIComponent(search)}`);
-      if (res.data) setResults(res.data);
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, [search]);
+  // Filter contacts locally
+  const filteredContacts = contacts.filter((c) =>
+    c.username.toLowerCase().includes(filter.toLowerCase())
+  );
 
-  const toggleSelect = (user: User) => {
+  const toggleSelect = (user: ContactUser) => {
     if (mode === 'direct') {
       setSelected([user]);
     } else {
@@ -68,7 +61,7 @@ export default function NewChatModal() {
   };
 
   const handleCreate = async () => {
-    if (selected.length === 0) { setError('Select at least one user'); return; }
+    if (selected.length === 0) { setError('Select at least one contact'); return; }
     if (mode !== 'direct' && !groupName.trim()) { setError('Enter a group name'); return; }
 
     setLoading(true);
@@ -85,7 +78,6 @@ export default function NewChatModal() {
     if (res.error) { setError(res.error); return; }
 
     if (res.data) {
-      // Обновляем список чатов
       const existing = chats.find((c) => c.id === res.data.id);
       if (!existing) {
         setChats([res.data, ...chats]);
@@ -147,14 +139,13 @@ export default function NewChatModal() {
           </div>
         )}
 
-        {/* Search */}
+        {/* Filter contacts */}
         <div className="px-6 pt-3">
           <input
-            ref={searchRef}
             type="text"
-            placeholder="Search users by username..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Filter contacts..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
             className="input-field"
           />
         </div>
@@ -174,33 +165,39 @@ export default function NewChatModal() {
           </div>
         )}
 
-        {/* Results */}
+        {/* Contact list */}
         <div className="px-6 pt-3 pb-4 max-h-60 overflow-y-auto no-scrollbar">
-          {results.length === 0 && search.trim() && (
-            <p className="text-center text-text-hint text-sm py-4">No users found</p>
+          {contacts.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-text-hint text-sm mb-1">No contacts yet</p>
+              <p className="text-text-hint text-xs">Add contacts first in the Contacts tab</p>
+            </div>
+          ) : filteredContacts.length === 0 ? (
+            <p className="text-center text-text-hint text-sm py-4">No matching contacts</p>
+          ) : (
+            filteredContacts.map((user) => {
+              const isSelected = selected.some((u) => u.id === user.id);
+              return (
+                <button
+                  key={user.id}
+                  onClick={() => toggleSelect(user)}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
+                    isSelected ? 'bg-accent/10' : 'hover:bg-elevated'
+                  }`}
+                >
+                  <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold uppercase">
+                    {user.username.charAt(0)}
+                  </div>
+                  <span className="text-sm text-text-primary font-medium">{user.username}</span>
+                  {isSelected && (
+                    <svg className="ml-auto text-accent" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </button>
+              );
+            })
           )}
-          {results.map((user) => {
-            const isSelected = selected.some((u) => u.id === user.id);
-            return (
-              <button
-                key={user.id}
-                onClick={() => toggleSelect(user)}
-                className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all ${
-                  isSelected ? 'bg-accent/10' : 'hover:bg-elevated'
-                }`}
-              >
-                <div className="w-9 h-9 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold uppercase">
-                  {user.username.charAt(0)}
-                </div>
-                <span className="text-sm text-text-primary font-medium">{user.username}</span>
-                {isSelected && (
-                  <svg className="ml-auto text-accent" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </button>
-            );
-          })}
         </div>
 
         {/* Error */}

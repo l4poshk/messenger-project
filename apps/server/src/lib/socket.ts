@@ -159,7 +159,20 @@ export function initSocket(server: HttpServer) {
 
     // ── WebRTC Signaling ──
     socket.on('call:offer', (payload: any) => {
+      // Forward offer via chat room AND directly to all members' user rooms
       socket.to(`chat:${payload.chatId}`).emit('call:offer', payload);
+
+      // Also send via user rooms for reliability (recipient may not have chat open)
+      prisma.member.findMany({
+        where: { chatId: payload.chatId },
+        select: { userId: true },
+      }).then((members) => {
+        members.forEach((m) => {
+          if (m.userId !== userId) {
+            io.to(`user:${m.userId}`).emit('call:offer', payload);
+          }
+        });
+      }).catch(() => {});
     });
 
     socket.on('call:answer', (payload: any) => {
@@ -170,8 +183,40 @@ export function initSocket(server: HttpServer) {
       socket.to(`chat:${payload.chatId}`).emit('call:ice-candidate', payload);
     });
 
+    // Normal end (during active call, or manual hang-up)
     socket.on('call:end', (payload: { chatId: string }) => {
       socket.to(`chat:${payload.chatId}`).emit('call:end');
+    });
+
+    // ── Cancel / Timeout — initiator hangs up before answer ──
+    socket.on('call:cancel', async (payload: { chatId: string; recipientId: string }) => {
+      logger.info(`📞 Call cancelled by ${username} in chat ${payload.chatId}`);
+
+      // Close recipient's incoming-call modal via their personal user room
+      if (payload.recipientId) {
+        io.to(`user:${payload.recipientId}`).emit('call:cancelled');
+      }
+      // Also broadcast to chat room as fallback
+      socket.to(`chat:${payload.chatId}`).emit('call:cancelled');
+
+      // Create missed-call notification
+      if (payload.recipientId) {
+        try {
+          const notification = await prisma.notification.create({
+            data: {
+              userId: payload.recipientId,
+              chatId: payload.chatId,
+              type: 'call',
+              title: `Missed call from ${username}`,
+              body: 'The caller hung up — no answer.',
+            },
+          });
+          io.to(`user:${payload.recipientId}`).emit('notification:new', notification);
+          logger.info(`📞 Missed call notification sent to ${payload.recipientId}`);
+        } catch (err) {
+          logger.error('Failed to create missed-call notification:', err);
+        }
+      }
     });
 
     socket.on('disconnect', () => {

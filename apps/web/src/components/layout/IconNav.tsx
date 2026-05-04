@@ -73,14 +73,17 @@ export default function IconNav() {
       />
       <NavButton id="nav-settings" icon="settings" label="Settings" active={activePanel === 'settings'} onClick={() => setActivePanel('settings')} />
 
-      {/* ── Avatar / Logout ── */}
+      {/* ── Avatar → Profile / Settings ── */}
       <button
         id="nav-user"
-        onClick={handleLogout}
-        className="w-9 h-9 rounded-full bg-accent/20 flex items-center justify-center
-                   text-accent text-xs font-bold uppercase mt-2
-                   hover:bg-accent/30 transition-colors"
-        title="Logout"
+        onClick={() => setActivePanel('settings')}
+        className={`w-9 h-9 rounded-full flex items-center justify-center
+                   text-xs font-bold uppercase mt-2 transition-colors ${
+          activePanel === 'settings'
+            ? 'bg-accent text-accent-dark ring-2 ring-accent/30'
+            : 'bg-accent/20 text-accent hover:bg-accent/30'
+        }`}
+        title="Profile & Settings"
       >
         {user?.username?.charAt(0) || '?'}
       </button>

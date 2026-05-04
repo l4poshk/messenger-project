@@ -63,3 +63,31 @@ userRouter.get('/me', async (req, res, next) => {
     next(err);
   }
 });
+
+// PATCH /api/users/me — update profile
+userRouter.patch('/me', async (req, res, next) => {
+  try {
+    const { username, status } = req.body as { username?: string; status?: string };
+    const data: Record<string, string> = {};
+    if (username?.trim()) data.username = username.trim();
+    if (status !== undefined) data.status = status.trim();
+
+    const user = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data,
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        avatar: true,
+        description: true,
+        status: true,
+        lastSeen: true,
+        createdAt: true
+      }
+    });
+    res.json({ data: user, error: null });
+  } catch (err) {
+    next(err);
+  }
+});

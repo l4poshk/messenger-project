@@ -10,6 +10,8 @@ import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useUiStore } from '@/store/uiStore';
 import { useNotificationStore } from '@/store/notificationStore';
+import { useContactStore } from '@/store/contactStore';
+import { removeAuthCookie } from '@/lib/cookies';
 import { api } from '@/lib/api';
 import type { Chat, User } from '@messenger/shared';
 
@@ -166,75 +168,164 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName }: {
 // ════════════════════════════════════════════════
 
 function ContactsPanel({ userId }: { userId?: string }) {
-  const [contacts, setContacts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { contacts, loading, fetchContacts, addContact, removeContact } = useContactStore();
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchContacts = async () => {
-      setLoading(true);
-      try {
-        const result = await api.get<any[]>('/users');
-        if (result.data) {
-          // Filter out self
-          setContacts(result.data.filter((u: any) => u.id !== userId));
-        }
-      } catch (err) {
-        console.error('[Contacts] Failed to load', err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchContacts();
-  }, [userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-32 text-text-hint text-sm">
-        <div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2" />
-        Loading...
-      </div>
-    );
-  }
+  // Debounced global search
+  useEffect(() => {
+    if (!search.trim()) { setSearchResults([]); return; }
+    setSearching(true);
+    const timeout = setTimeout(async () => {
+      const res = await api.get<User[]>(`/users/search?q=${encodeURIComponent(search)}`);
+      if (res.data) {
+        // Exclude users already in contacts
+        const contactIds = new Set(contacts.map((c) => c.id));
+        setSearchResults(res.data.filter((u) => !contactIds.has(u.id)));
+      }
+      setSearching(false);
+    }, 300);
+    return () => { clearTimeout(timeout); setSearching(false); };
+  }, [search, contacts]);
 
-  if (contacts.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-text-hint text-sm opacity-50">
-        <p>No contacts found</p>
-      </div>
-    );
-  }
+  const handleAdd = async (user: User) => {
+    setAddingId(user.id);
+    await addContact(user.id);
+    setAddingId(null);
+    // Remove from search results
+    setSearchResults((prev) => prev.filter((u) => u.id !== user.id));
+  };
 
   return (
-    <div className="px-2 space-y-0.5">
-      {contacts.map((contact) => {
-        const isOnline = contact.status === 'ONLINE' ||
-          (contact.lastSeen && Date.now() - new Date(contact.lastSeen).getTime() < 5 * 60 * 1000);
+    <div className="flex flex-col h-full">
+      {/* Search bar */}
+      <div className="px-3 py-2 border-b border-border shrink-0">
+        <div className="relative">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-text-hint" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search users to add..."
+            className="w-full pl-9 pr-3 py-2 bg-elevated rounded-lg text-sm text-text-primary placeholder:text-text-hint outline-none focus:ring-1 focus:ring-accent transition-all"
+          />
+        </div>
+      </div>
 
-        return (
-          <div
-            key={contact.id}
-            className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-elevated/50 transition-colors"
-          >
-            <div className="relative shrink-0">
-              <div className="w-11 h-11 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold">
-                {contact.username?.charAt(0)?.toUpperCase() || '?'}
+      <div className="flex-1 overflow-y-auto no-scrollbar">
+        {/* Search results */}
+        {search.trim() && (
+          <div className="px-2 pt-2">
+            <p className="text-[10px] font-semibold text-text-hint uppercase tracking-wider px-3 pb-1.5">
+              Search Results
+            </p>
+            {searching && (
+              <div className="flex items-center justify-center py-4 text-text-hint text-sm">
+                <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2" />
+                Searching...
               </div>
-              <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-secondary ${
-                isOnline ? 'bg-accent' : 'bg-text-hint'
-              }`} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-text-primary truncate">{contact.username}</p>
-              <p className="text-xs text-text-muted truncate">
-                {isOnline ? 'Online' : contact.lastSeen
-                  ? `Last seen ${new Date(contact.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
-                  : 'Offline'
-                }
-              </p>
-            </div>
+            )}
+            {!searching && searchResults.length === 0 && (
+              <p className="text-center text-text-hint text-xs py-4">No users found</p>
+            )}
+            {searchResults.map((user) => (
+              <div key={user.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-elevated/50 transition-colors">
+                <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold uppercase shrink-0">
+                  {user.username.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-text-primary truncate">{user.username}</p>
+                  <p className="text-xs text-text-muted truncate">{user.email}</p>
+                </div>
+                <button
+                  onClick={() => handleAdd(user)}
+                  disabled={addingId === user.id}
+                  className="px-3 py-1.5 rounded-lg bg-accent text-accent-dark text-xs font-medium hover:bg-accent-hover transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {addingId === user.id ? '...' : '+ Add'}
+                </button>
+              </div>
+            ))}
           </div>
-        );
-      })}
+        )}
+
+        {/* My contacts */}
+        <div className="px-2 pt-2">
+          <p className="text-[10px] font-semibold text-text-hint uppercase tracking-wider px-3 pb-1.5">
+            My Contacts ({contacts.length})
+          </p>
+
+          {loading && contacts.length === 0 && (
+            <div className="flex items-center justify-center h-24 text-text-hint text-sm">
+              <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin mr-2" />
+              Loading...
+            </div>
+          )}
+
+          {!loading && contacts.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-10 text-text-hint text-center px-6">
+              <div className="w-14 h-14 rounded-2xl bg-accent/5 flex items-center justify-center mb-3 text-accent/40">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+                  <circle cx="9" cy="7" r="4" />
+                  <line x1="19" y1="8" x2="19" y2="14" />
+                  <line x1="22" y1="11" x2="16" y2="11" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-text-muted mb-1">No contacts yet</p>
+              <p className="text-xs">Search above to add people</p>
+            </div>
+          )}
+
+          {contacts.map((contact) => {
+            const isOnline = contact.status === 'ONLINE' ||
+              (contact.lastSeen && Date.now() - new Date(contact.lastSeen).getTime() < 5 * 60 * 1000);
+
+            return (
+              <div
+                key={contact.id}
+                className="group flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-elevated/50 transition-colors"
+              >
+                <div className="relative shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold text-xs uppercase">
+                    {contact.username?.charAt(0) || '?'}
+                  </div>
+                  <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary ${
+                    isOnline ? 'bg-accent' : 'bg-text-hint'
+                  }`} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-text-primary truncate">{contact.username}</p>
+                  <p className="text-xs text-text-muted truncate">
+                    {isOnline ? 'Online' : contact.lastSeen
+                      ? `Last seen ${new Date(contact.lastSeen).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+                      : 'Offline'
+                    }
+                  </p>
+                </div>
+                <button
+                  onClick={() => removeContact(contact.id)}
+                  className="opacity-0 group-hover:opacity-100 text-text-hint hover:text-danger transition-all p-1 shrink-0"
+                  title="Remove contact"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
     </div>
   );
 }
@@ -361,73 +452,177 @@ function NotificationsPanel() {
 
 function SettingsPanel() {
   const user = useAuthStore((s) => s.user);
+  const refreshToken = useAuthStore((s) => s.refreshToken);
   const theme = useUiStore((s) => s.theme);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const logout = useAuthStore((s) => s.logout);
 
+  const [username, setUsername] = useState(user?.username || '');
+  const [status, setStatus] = useState(user?.status || '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Sync when user changes
+  useEffect(() => {
+    setUsername(user?.username || '');
+    setStatus(user?.status || '');
+  }, [user?.username, user?.status]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setSaved(false);
+    try {
+      await api.patch('/users/me', {
+        username: username.trim() || user?.username,
+        status: status.trim(),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('[Settings] Save failed', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (refreshToken) {
+      await api.post('/auth/logout', { refreshToken });
+    }
+    logout();
+    removeAuthCookie();
+    window.location.href = '/login';
+  };
+
+  const hasChanges = username !== (user?.username || '') || status !== (user?.status || '');
+
   return (
-    <div className="px-3 py-4 space-y-4">
-      {/* Profile card */}
-      <div className="flex items-center gap-4 px-3 py-4 rounded-xl bg-elevated">
-        <div className="w-14 h-14 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xl font-bold uppercase">
-          {user?.username?.charAt(0) || '?'}
+    <div className="flex flex-col h-full">
+      <div className="flex-1 overflow-y-auto no-scrollbar px-3 py-4 space-y-5">
+        {/* ── Profile Header ── */}
+        <div className="flex flex-col items-center py-6 px-4 rounded-2xl bg-elevated">
+          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-accent to-accent/60 flex items-center justify-center text-white text-3xl font-bold uppercase shadow-lg mb-4">
+            {user?.username?.charAt(0) || '?'}
+          </div>
+          <p className="text-lg font-semibold text-text-primary">{user?.username}</p>
+          <p className="text-xs text-text-muted mt-0.5">{user?.email || 'No email'}</p>
+          {user?.status && (
+            <span className="mt-2 px-3 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+              {user.status}
+            </span>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-base font-semibold text-text-primary truncate">{user?.username}</p>
-          <p className="text-xs text-text-muted truncate">{user?.email || 'No email'}</p>
-          <p className="text-xs text-accent mt-0.5">{user?.status || 'Online'}</p>
-        </div>
-      </div>
 
-      {/* Theme toggle */}
-      <div className="space-y-1">
-        <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-3">Appearance</p>
-        <button
-          onClick={toggleTheme}
-          className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-elevated transition-colors"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-elevated flex items-center justify-center text-text-muted">
-              {theme === 'dark' ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
-                  <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
-                  <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
-                  <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
-                </svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-                </svg>
-              )}
+        {/* ── Edit Profile ── */}
+        <div className="space-y-1">
+          <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-3">Edit Profile</p>
+
+          <div className="px-3 pt-2 space-y-3">
+            {/* Username */}
+            <div>
+              <label className="text-xs text-text-muted font-medium mb-1 block">Username</label>
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-3 py-2.5 bg-primary rounded-lg text-sm text-text-primary border border-border outline-none focus:ring-1 focus:ring-accent transition-all"
+                placeholder="Your username"
+              />
             </div>
-            <span className="text-sm text-text-primary">Dark mode</span>
+
+            {/* Status */}
+            <div>
+              <label className="text-xs text-text-muted font-medium mb-1 block">Status</label>
+              <input
+                type="text"
+                value={status}
+                onChange={(e) => setStatus(e.target.value)}
+                className="w-full px-3 py-2.5 bg-primary rounded-lg text-sm text-text-primary border border-border outline-none focus:ring-1 focus:ring-accent transition-all"
+                placeholder="What's on your mind?"
+                maxLength={100}
+              />
+            </div>
+
+            {/* Save button */}
+            {hasChanges && (
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="w-full py-2.5 rounded-lg bg-accent text-accent-dark text-sm font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : saved ? '✓ Saved!' : 'Save Changes'}
+              </button>
+            )}
+            {saved && !hasChanges && (
+              <p className="text-center text-accent text-xs font-medium animate-fade-in">✓ Profile updated</p>
+            )}
           </div>
-          <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${
-            theme === 'dark' ? 'bg-accent' : 'bg-text-hint/30'
-          }`}>
-            <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-              theme === 'dark' ? 'translate-x-4' : 'translate-x-0'
-            }`} />
+        </div>
+
+        {/* ── Appearance ── */}
+        <div className="space-y-1">
+          <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-3">Appearance</p>
+          <button
+            onClick={toggleTheme}
+            className="w-full flex items-center justify-between px-3 py-3 rounded-xl hover:bg-elevated transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-lg bg-elevated flex items-center justify-center text-text-muted">
+                {theme === 'dark' ? (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+                    <line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" />
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+                  </svg>
+                ) : (
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+                  </svg>
+                )}
+              </div>
+              <span className="text-sm text-text-primary">Dark mode</span>
+            </div>
+            <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${
+              theme === 'dark' ? 'bg-accent' : 'bg-text-hint/30'
+            }`}>
+              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+                theme === 'dark' ? 'translate-x-4' : 'translate-x-0'
+              }`} />
+            </div>
+          </button>
+        </div>
+
+        {/* ── Account Info ── */}
+        <div className="space-y-1">
+          <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-3">Account Info</p>
+          <div className="px-3 py-2 space-y-2">
+            <div className="flex justify-between text-xs">
+              <span className="text-text-muted">User ID</span>
+              <span className="text-text-hint font-mono truncate ml-4 max-w-[140px]">{user?.id}</span>
+            </div>
+            <div className="flex justify-between text-xs">
+              <span className="text-text-muted">Joined</span>
+              <span className="text-text-hint">
+                {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : '—'}
+              </span>
+            </div>
           </div>
-        </button>
+        </div>
       </div>
 
-      {/* Account section */}
-      <div className="space-y-1">
-        <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-3">Account</p>
+      {/* ── Logout (fixed at bottom) ── */}
+      <div className="px-3 py-3 border-t border-border shrink-0">
         <button
-          onClick={logout}
-          className="w-full flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-danger/10 transition-colors text-danger"
+          onClick={handleLogout}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-danger/10 hover:bg-danger/20 text-danger font-medium text-sm transition-colors"
         >
-          <div className="w-9 h-9 rounded-lg bg-danger/10 flex items-center justify-center">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
-              <polyline points="16 17 21 12 16 7" />
-              <line x1="21" y1="12" x2="9" y2="12" />
-            </svg>
-          </div>
-          <span className="text-sm font-medium">Log out</span>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4" />
+            <polyline points="16 17 21 12 16 7" />
+            <line x1="21" y1="12" x2="9" y2="12" />
+          </svg>
+          Log out
         </button>
       </div>
     </div>

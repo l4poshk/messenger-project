@@ -9,6 +9,7 @@ import { useChatStore } from './chatStore';
 import { useMessageStore } from './messageStore';
 import { useCallStore } from './callStore';
 import { useNotificationStore } from './notificationStore';
+import { useContactStore } from './contactStore';
 
 interface AuthState {
   // ── State ──
@@ -59,6 +60,7 @@ export const useAuthStore = create<AuthState>()(
         useMessageStore.getState().reset();
         useCallStore.getState().resetCall();
         useNotificationStore.getState().reset();
+        useContactStore.getState().reset();
 
         // Reset auth state
         set({
