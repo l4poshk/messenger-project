@@ -98,6 +98,41 @@ export function initSocket(server: HttpServer) {
 
         // Рассылаем всем в комнате чата
         io.to(`chat:${data.chatId}`).emit('message:new', message);
+
+        // ── Generate notifications for offline/inactive members ──
+        try {
+          const chatMembers = await prisma.member.findMany({
+            where: { chatId: data.chatId },
+            select: { userId: true },
+          });
+
+          // Get set of user IDs currently in the chat room
+          const roomSockets = await io.in(`chat:${data.chatId}`).fetchSockets();
+          const activeUserIds = new Set(
+            roomSockets.map((s) => (s as any).userId).filter(Boolean)
+          );
+
+          for (const member of chatMembers) {
+            // Skip the sender and anyone actively in the chat room
+            if (member.userId === userId || activeUserIds.has(member.userId)) continue;
+
+            const notification = await prisma.notification.create({
+              data: {
+                userId: member.userId,
+                chatId: data.chatId,
+                type: 'message',
+                title: `New message from ${username}`,
+                body: data.type === 'AUDIO' ? '🎤 Voice message' :
+                      data.type === 'IMAGE' ? '🖼️ Photo' :
+                      (data.content || '').substring(0, 100) || 'New message',
+              },
+            });
+
+            io.to(`user:${member.userId}`).emit('notification:new', notification);
+          }
+        } catch (notifErr) {
+          logger.error('Failed to generate notifications:', notifErr);
+        }
       } catch (err) {
         logger.error('Failed to save message:', err);
       }

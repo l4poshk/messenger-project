@@ -2,10 +2,12 @@
 
 // ──────────────────────────────────────────────
 // Icon Nav Bar — leftmost narrow panel (56px)
+// All buttons are now wired to real functionality
 // ──────────────────────────────────────────────
 
 import { useAuthStore } from '@/store/authStore';
-import { useUiStore } from '@/store/uiStore';
+import { useUiStore, type ActivePanel } from '@/store/uiStore';
+import { useNotificationStore } from '@/store/notificationStore';
 import { removeAuthCookie } from '@/lib/cookies';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
@@ -16,6 +18,10 @@ export default function IconNav() {
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const logout = useAuthStore((s) => s.logout);
   const toggleTheme = useUiStore((s) => s.toggleTheme);
+  const activePanel = useUiStore((s) => s.activePanel);
+  const setActivePanel = useUiStore((s) => s.setActivePanel);
+  const theme = useUiStore((s) => s.theme);
+  const unreadCount = useNotificationStore((s) => s.unreadCount);
 
   const handleLogout = async () => {
     if (refreshToken) {
@@ -31,6 +37,7 @@ export default function IconNav() {
       {/* ── App logo ── */}
       <button
         id="nav-home"
+        onClick={() => setActivePanel('chats')}
         className="w-10 h-10 rounded-xl bg-accent/10 flex items-center justify-center
                    hover:bg-accent/20 transition-colors mb-4"
         title="Home"
@@ -50,16 +57,21 @@ export default function IconNav() {
       <div className="w-8 h-px bg-border mb-2" />
 
       {/* ── Nav items ── */}
-      <NavButton id="nav-chats" icon="chats" label="Chats" active />
-      <NavButton id="nav-contacts" icon="contacts" label="Contacts" />
-      <NavButton id="nav-notifications" icon="notifications" label="Notifications" />
+      <NavButton id="nav-chats" icon="chats" label="Chats" active={activePanel === 'chats'} onClick={() => setActivePanel('chats')} />
+      <NavButton id="nav-contacts" icon="contacts" label="Contacts" active={activePanel === 'contacts'} onClick={() => setActivePanel('contacts')} />
+      <NavButton id="nav-notifications" icon="notifications" label="Notifications" active={activePanel === 'notifications'} onClick={() => setActivePanel('notifications')} badge={unreadCount} />
 
       {/* ── Spacer ── */}
       <div className="flex-1" />
 
       {/* ── Bottom actions ── */}
-      <NavButton id="nav-theme" icon="theme" label="Toggle theme" onClick={toggleTheme} />
-      <NavButton id="nav-settings" icon="settings" label="Settings" />
+      <NavButton
+        id="nav-theme"
+        icon={theme === 'dark' ? 'theme' : 'moon'}
+        label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        onClick={toggleTheme}
+      />
+      <NavButton id="nav-settings" icon="settings" label="Settings" active={activePanel === 'settings'} onClick={() => setActivePanel('settings')} />
 
       {/* ── Avatar / Logout ── */}
       <button
@@ -83,12 +95,14 @@ function NavButton({
   icon,
   label,
   active,
+  badge,
   onClick,
 }: {
   id: string;
   icon: string;
   label: string;
   active?: boolean;
+  badge?: number;
   onClick?: () => void;
 }) {
   const icons: Record<string, React.ReactNode> = {
@@ -124,6 +138,11 @@ function NavButton({
         <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
       </svg>
     ),
+    moon: (
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
+      </svg>
+    ),
     settings: (
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
         <circle cx="12" cy="12" r="3" />
@@ -136,7 +155,7 @@ function NavButton({
     <button
       id={id}
       onClick={onClick}
-      className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors
+      className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-colors
         ${active
           ? 'bg-elevated text-accent'
           : 'text-text-muted hover:bg-elevated hover:text-text-primary'
@@ -144,6 +163,11 @@ function NavButton({
       title={label}
     >
       {icons[icon]}
+      {badge !== undefined && badge > 0 && (
+        <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] rounded-full bg-danger text-white text-[10px] font-bold flex items-center justify-center px-1 shadow-sm">
+          {badge > 99 ? '99+' : badge}
+        </span>
+      )}
     </button>
   );
 }

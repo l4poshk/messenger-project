@@ -3,6 +3,7 @@ import { io, Socket } from 'socket.io-client';
 import { useAuthStore } from './authStore';
 import { useMessageStore } from './messageStore';
 import { useChatStore } from './chatStore';
+import { useNotificationStore } from './notificationStore';
 
 interface SocketState {
   socket: Socket | null;
@@ -96,6 +97,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       if (!chats.find((c) => c.id === newChat.id)) {
         setChats([newChat, ...chats]);
       }
+    });
+
+    // ── Слушаем уведомления ──
+    socket.on('notification:new', (notification) => {
+      console.log('[Socket] 🔔 notification:new', notification.id);
+      useNotificationStore.getState().addNotification(notification);
     });
 
     set({ socket });

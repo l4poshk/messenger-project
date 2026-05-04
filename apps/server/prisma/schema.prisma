@@ -144,6 +144,7 @@ model Session {
 model Notification {
   id        String   @id @default(cuid())
   userId    String
+  chatId    String?
   type      String
   title     String
   body      String

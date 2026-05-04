@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
 type Theme = 'dark' | 'light';
+export type ActivePanel = 'chats' | 'contacts' | 'notifications' | 'settings';
 type ActiveModal =
   | null
   | 'create-chat'
@@ -17,6 +18,7 @@ type ActiveModal =
 interface UiState {
   // ── State ──
   theme: Theme;
+  activePanel: ActivePanel;
   sidebarOpen: boolean;
   activeModal: ActiveModal;
   lightboxImage: string | null;
@@ -26,6 +28,7 @@ interface UiState {
   toggleTheme: () => void;
   setSidebarOpen: (open: boolean) => void;
   toggleSidebar: () => void;
+  setActivePanel: (panel: ActivePanel) => void;
   openModal: (modal: ActiveModal) => void;
   closeModal: () => void;
   openLightbox: (imageUrl: string) => void;
@@ -37,6 +40,7 @@ export const useUiStore = create<UiState>()(
     (set, get) => ({
       // ── Initial state ──
       theme: 'dark',
+      activePanel: 'chats' as ActivePanel,
       sidebarOpen: true,
       activeModal: null,
       lightboxImage: null,
@@ -58,6 +62,8 @@ export const useUiStore = create<UiState>()(
 
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+
+      setActivePanel: (activePanel) => set({ activePanel }),
 
       openModal: (activeModal) => set({ activeModal }),
       closeModal: () => set({ activeModal: null }),

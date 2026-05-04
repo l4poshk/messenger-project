@@ -17,7 +17,7 @@
     "db:studio": "turbo run db:studio --filter=server"
   },
   "devDependencies": {
-    "turbo": "^2.5.0",
+    "turbo": "^2.9.8",
     "typescript": "^5.7.0"
   },
   "engines": {

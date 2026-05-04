@@ -5,37 +5,37 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // ── Background surfaces ──
-        primary: '#1a1a1f',
-        secondary: '#16161b',
-        tertiary: '#111114',
-        elevated: '#242429',
-        'surface-hover': '#2c2c32',
+        // ── Background surfaces (CSS variable-driven) ──
+        primary: 'var(--color-primary)',
+        secondary: 'var(--color-secondary)',
+        tertiary: 'var(--color-tertiary)',
+        elevated: 'var(--color-elevated)',
+        'surface-hover': 'var(--color-surface-hover)',
 
         // ── Borders ──
-        border: '#2a2a2e',
-        'border-light': '#3a3a3e',
+        border: 'var(--color-border)',
+        'border-light': 'var(--color-border-light)',
 
         // ── Text ──
-        'text-primary': '#e4e4e7',
-        'text-muted': '#71717a',
-        'text-hint': '#52525b',
+        'text-primary': 'var(--color-text-primary)',
+        'text-muted': 'var(--color-text-muted)',
+        'text-hint': 'var(--color-text-hint)',
 
         // ── Accent ──
-        accent: '#22c55e',
-        'accent-hover': '#16a34a',
-        'accent-dark': '#052e16',
-        'accent-soft': '#22c55e1a', // 10% opacity
+        accent: 'var(--color-accent)',
+        'accent-hover': 'var(--color-accent-hover)',
+        'accent-dark': 'var(--color-accent-dark)',
+        'accent-soft': 'rgba(34, 197, 94, 0.1)',
 
         // ── Message bubbles ──
-        'msg-outgoing': '#1a3a24',
-        'msg-outgoing-text': '#bbf7d0',
+        'msg-outgoing': 'var(--color-msg-outgoing)',
+        'msg-outgoing-text': 'var(--color-msg-outgoing-text)',
 
         // ── Status ──
-        danger: '#ef4444',
-        'danger-hover': '#dc2626',
-        warning: '#f59e0b',
-        info: '#3b82f6',
+        danger: 'var(--color-danger)',
+        'danger-hover': 'var(--color-danger-hover)',
+        warning: 'var(--color-warning)',
+        info: 'var(--color-info)',
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
