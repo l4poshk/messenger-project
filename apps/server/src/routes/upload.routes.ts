@@ -9,6 +9,8 @@ import * as uploadService from '../services/upload.service';
 import { extractKeyFromUrl, getBufferFromR2, isR2Configured } from '../lib/r2';
 import { logger } from '../lib/logger';
 import { prisma } from '../lib/prisma';
+import * as chatService from '../services/chat.service';
+import { getIO } from '../lib/socket';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -146,6 +148,33 @@ uploadRouter.post('/avatar', upload.single('file'), async (req, res, next) => {
     });
 
     res.json({ data: updatedUser, error: null });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/upload/chat-avatar/:chatId
+uploadRouter.post('/chat-avatar/:chatId', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ data: null, error: 'No file provided' });
+      return;
+    }
+
+    // 1. Upload to R2
+    const result = await uploadService.uploadAvatar(req.file);
+
+    // 2. Update Chat via chatService (handles permissions internally)
+    const updatedChat = await chatService.updateChat(
+      req.params.chatId,
+      req.user!.userId,
+      { avatar: result.url }
+    );
+
+    // 3. Notify participants
+    getIO().to(`chat:${updatedChat.id}`).emit('chat:update', updatedChat);
+
+    res.json({ data: updatedChat, error: null });
   } catch (err) {
     next(err);
   }

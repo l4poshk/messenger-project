@@ -29,7 +29,7 @@ enum MessageType {
 }
 
 enum MemberRole {
-  OWNER
+  CREATOR
   ADMIN
   MEMBER
 }
@@ -53,6 +53,7 @@ model User {
   notifications Notification[]
   contacts      Contact[] @relation("owner")
   contactOf     Contact[] @relation("contact")
+  createdChats  Chat[]    @relation("chatCreator")
 
   @@index([username])
   @@index([email])
@@ -65,7 +66,10 @@ model Chat {
   name        String?
   avatar      String?
   description String?
+  creatorId   String?
   createdAt   DateTime @default(now())
+
+  creator  User?    @relation("chatCreator", fields: [creatorId], references: [id])
 
   members  Member[]
   messages Message[]

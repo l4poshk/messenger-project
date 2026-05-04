@@ -25,6 +25,7 @@ export default function NewChatModal() {
   const [filter, setFilter] = useState('');
   const [selected, setSelected] = useState<ContactUser[]>([]);
   const [groupName, setGroupName] = useState('');
+  const [groupDescription, setGroupDescription] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -36,6 +37,7 @@ export default function NewChatModal() {
       setFilter('');
       setSelected([]);
       setGroupName('');
+      setGroupDescription('');
       setError('');
       if (activeModal === 'create-group') setMode('group');
       else setMode('direct');
@@ -70,7 +72,8 @@ export default function NewChatModal() {
     const res = await api.post<any>('/chats', {
       type: mode === 'direct' ? 'DIRECT' : mode === 'group' ? 'GROUP' : 'SUPERGROUP',
       memberIds: selected.map((u) => u.id),
-      name: mode === 'direct' ? undefined : groupName.trim()
+      name: mode === 'direct' ? undefined : groupName.trim(),
+      description: mode === 'direct' ? undefined : groupDescription.trim() || undefined
     });
 
     setLoading(false);
@@ -127,14 +130,19 @@ export default function NewChatModal() {
         </div>
 
         {/* Group name input */}
-        {mode !== 'direct' && (
-          <div className="px-6 pt-3">
+          <div className="px-6 pt-3 flex flex-col gap-3">
             <input
               type="text"
               placeholder={mode === 'supergroup' ? 'Supergroup name...' : 'Group name...'}
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               className="input-field"
+            />
+            <textarea
+              placeholder="Description (optional)..."
+              value={groupDescription}
+              onChange={(e) => setGroupDescription(e.target.value)}
+              className="input-field min-h-[80px] py-2 resize-none"
             />
           </div>
         )}

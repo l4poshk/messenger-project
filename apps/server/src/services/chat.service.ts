@@ -39,10 +39,10 @@ export async function getUserChats(userId: string) {
 // ── Создать чат (DIRECT / GROUP / SUPERGROUP) ──
 
 export async function createChat(
-  userId: string,
   type: ChatType,
   memberIds: string[],
-  name?: string
+  name?: string,
+  description?: string
 ) {
   // Для DIRECT — проверяем, нет ли уже чата между этими двумя
   if (type === 'DIRECT') {
@@ -89,10 +89,12 @@ export async function createChat(
     data: {
       type,
       name: type === 'DIRECT' ? null : name,
+      description: type === 'DIRECT' ? null : description,
+      creatorId: userId,
       members: {
         create: allMemberIds.map((id, idx) => ({
           userId: id,
-          role: id === userId ? 'OWNER' : 'MEMBER'
+          role: id === userId ? 'CREATOR' : 'MEMBER'
         }))
       },
       // Для суперогрупп — создаём дефолтный топик "General"
@@ -146,7 +148,7 @@ export async function addMember(chatId: string, userId: string, targetUserId: st
   const requester = await assertMember(chatId, userId);
 
   if (requester.role === 'MEMBER') {
-    throw new AppError(403, 'Only admins and owners can add members');
+    throw new AppError(403, 'Only admins and creators can add members');
   }
 
   const chat = await prisma.chat.findUnique({ where: { id: chatId } });
@@ -174,15 +176,28 @@ export async function addMember(chatId: string, userId: string, targetUserId: st
 
 export async function removeMember(chatId: string, userId: string, targetUserId: string) {
   const requester = await assertMember(chatId, userId);
+  const target = await assertMember(chatId, targetUserId);
 
-  // Нельзя удалить владельца
-  if (targetUserId === userId && requester.role === 'OWNER') {
-    throw new AppError(400, 'Owner cannot leave. Transfer ownership first.');
+  // 1. Абсолютный иммунитет: Создателя удалить невозможно
+  if (target.role === 'CREATOR') {
+    throw new AppError(403, 'Cannot kick the chat creator');
   }
 
-  // Только OWNER/ADMIN могут удалять других
-  if (targetUserId !== userId && requester.role === 'MEMBER') {
-    throw new AppError(403, 'Only admins and owners can remove members');
+  // 2. Выход из чата (самоудаление)
+  if (targetUserId === userId) {
+    if (requester.role === 'CREATOR') {
+      throw new AppError(400, 'Creator cannot leave. Delete the chat or transfer rights first.');
+    }
+  } else {
+    // 3. Кик другого пользователя: только CREATOR или ADMIN
+    if (requester.role !== 'CREATOR' && requester.role !== 'ADMIN') {
+      throw new AppError(403, 'Only admins and creators can remove members');
+    }
+
+    // 4. Админ не может кикнуть другого админа (только Создатель может)
+    if (requester.role === 'ADMIN' && target.role === 'ADMIN') {
+      throw new AppError(403, 'Admins cannot kick other admins');
+    }
   }
 
   await prisma.member.delete({
@@ -192,18 +207,80 @@ export async function removeMember(chatId: string, userId: string, targetUserId:
   return { removed: true };
 }
 
+// ── Назначить админом ──
+
+export async function promoteToAdmin(chatId: string, userId: string, targetUserId: string) {
+  const requester = await assertMember(chatId, userId);
+
+  if (requester.role !== 'CREATOR') {
+    throw new AppError(403, 'Only the creator can promote members to admin');
+  }
+
+  return await prisma.member.update({
+    where: { chatId_userId: { chatId, userId: targetUserId } },
+    data: { role: 'ADMIN' },
+    include: {
+      user: { select: { id: true, username: true, avatar: true } }
+    }
+  });
+}
+
+// ── Разжаловать админа ──
+
+export async function demoteAdmin(chatId: string, userId: string, targetUserId: string) {
+  const requester = await assertMember(chatId, userId);
+
+  if (requester.role !== 'CREATOR') {
+    throw new AppError(403, 'Only the creator can demote admins');
+  }
+
+  return await prisma.member.update({
+    where: { chatId_userId: { chatId, userId: targetUserId } },
+    data: { role: 'MEMBER' },
+    include: {
+      user: { select: { id: true, username: true, avatar: true } }
+    }
+  });
+}
+
+// ── Обновить данные чата ──
+
+export async function updateChat(
+  chatId: string,
+  userId: string,
+  data: { name?: string; description?: string; avatar?: string }
+) {
+  const requester = await assertMember(chatId, userId);
+
+  if (requester.role !== 'CREATOR' && requester.role !== 'ADMIN') {
+    throw new AppError(403, 'Only admins and creators can update chat info');
+  }
+
+  return await prisma.chat.update({
+    where: { id: chatId },
+    data,
+    include: {
+      members: {
+        include: {
+          user: { select: { id: true, username: true, avatar: true, status: true, lastSeen: true } }
+        }
+      }
+    }
+  });
+}
+
 // ── Изменить роль участника ──
 
 export async function changeRole(
   chatId: string,
   userId: string,
   targetUserId: string,
-  newRole: MemberRole
+  newRole: any
 ) {
   const requester = await assertMember(chatId, userId);
 
-  if (requester.role !== 'OWNER') {
-    throw new AppError(403, 'Only the owner can change roles');
+  if (requester.role !== 'CREATOR') {
+    throw new AppError(403, 'Only the creator can change roles');
   }
 
   if (targetUserId === userId) {
@@ -244,7 +321,7 @@ export async function createTopic(chatId: string, userId: string, name: string) 
   }
 
   if (requester.role === 'MEMBER') {
-    throw new AppError(403, 'Only admins and owners can create topics');
+    throw new AppError(403, 'Only admins and creators can create topics');
   }
 
   return await prisma.topic.create({

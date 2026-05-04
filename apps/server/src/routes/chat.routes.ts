@@ -83,6 +83,40 @@ chatRouter.patch('/:id/members/:userId/role', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// PATCH /api/chats/:id/members/:userId/promote — назначить админом
+chatRouter.patch('/:id/members/:userId/promote', async (req, res, next) => {
+  try {
+    const member = await chatService.promoteToAdmin(
+      req.params.id, req.user!.userId, req.params.userId
+    );
+    res.json({ data: member, error: null });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/chats/:id/members/:userId/demote — разжаловать админа
+chatRouter.patch('/:id/members/:userId/demote', async (req, res, next) => {
+  try {
+    const member = await chatService.demoteAdmin(
+      req.params.id, req.user!.userId, req.params.userId
+    );
+    res.json({ data: member, error: null });
+  } catch (err) { next(err); }
+});
+
+// PATCH /api/chats/:id — обновить метаданные чата
+chatRouter.patch('/:id', async (req, res, next) => {
+  try {
+    const chat = await chatService.updateChat(
+      req.params.id, req.user!.userId, req.body
+    );
+
+    // Рассылаем обновление всем участникам
+    getIO().to(`chat:${chat.id}`).emit('chat:update', chat);
+
+    res.json({ data: chat, error: null });
+  } catch (err) { next(err); }
+});
+
 // GET /api/chats/:id/topics — топики суперогруппы
 chatRouter.get('/:id/topics', async (req, res, next) => {
   try {

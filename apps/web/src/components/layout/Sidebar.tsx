@@ -47,6 +47,14 @@ export default function Sidebar() {
     return chat.name || 'Group Chat';
   }, [user?.id]);
 
+  const getChatAvatar = useCallback((chat: any) => {
+    if (chat.type === 'DIRECT') {
+      const otherMember = chat.members?.find((m: any) => m.userId !== user?.id);
+      return otherMember?.user?.avatar;
+    }
+    return chat.avatar;
+  }, [user?.id]);
+
   // ── Panel titles ──
   const panelTitles: Record<string, string> = {
     chats: 'Chats',
@@ -87,7 +95,15 @@ export default function Sidebar() {
 
       {/* ── Panel content ── */}
       <div className="flex-1 overflow-y-auto no-scrollbar">
-        {activePanel === 'chats' && <ChatListPanel chats={chats} activeChatId={activeChatId} setActiveChat={setActiveChat} getChatName={getChatName} />}
+        {activePanel === 'chats' && (
+          <ChatListPanel
+            chats={chats}
+            activeChatId={activeChatId}
+            setActiveChat={setActiveChat}
+            getChatName={getChatName}
+            getChatAvatar={getChatAvatar}
+          />
+        )}
         {activePanel === 'contacts' && <ContactsPanel userId={user?.id} />}
         {activePanel === 'notifications' && <NotificationsPanel />}
         {activePanel === 'settings' && <SettingsPanel />}
@@ -116,11 +132,12 @@ export default function Sidebar() {
 //  Panel: Chat List
 // ════════════════════════════════════════════════
 
-function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName }: {
+function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getChatAvatar }: {
   chats: Chat[];
   activeChatId: string | null;
   setActiveChat: (id: string) => void;
   getChatName: (chat: any) => string;
+  getChatAvatar: (chat: any) => string | null;
 }) {
   if (chats.length === 0) {
     return (
@@ -141,8 +158,12 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName }: {
           }`}
         >
           <div className="relative shrink-0">
-            <div className="w-11 h-11 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold">
-              {getChatName(chat).charAt(0).toUpperCase()}
+            <div className="w-11 h-11 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold overflow-hidden">
+              {getChatAvatar(chat) ? (
+                <img src={getChatAvatar(chat)!} alt={getChatName(chat)} className="w-full h-full object-cover" />
+              ) : (
+                getChatName(chat).charAt(0).toUpperCase()
+              )}
             </div>
           </div>
           <div className="flex-1 min-w-0 text-left">

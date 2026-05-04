@@ -10,7 +10,7 @@ import { api } from '@/lib/api';
 import TopicBar from '@/components/chat/TopicBar';
 import AudioPlayer from '@/components/chat/AudioPlayer';
 import VoiceRecorder from '@/components/chat/VoiceRecorder';
-import ChatInfoPanel from '@/components/chat/ChatInfoPanel';
+import ChatInfoPanel from '../chat/ChatInfoPanel';
 import type { Message, Topic } from '@messenger/shared';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -47,7 +47,7 @@ export default function ChatArea() {
   const myMembership = (activeChat as any)?.members?.find(
     (m: any) => m.userId === userId
   );
-  const canManageTopics = myMembership?.role === 'OWNER' || myMembership?.role === 'ADMIN';
+  const canManageTopics = myMembership?.role === 'CREATOR' || myMembership?.role === 'ADMIN';
 
   // ── Fetch topics for supergroup ──
   useEffect(() => {
@@ -101,6 +101,16 @@ export default function ChatArea() {
       return other?.user?.username || 'Chat';
     }
     return chat.name || 'Group';
+  };
+
+  const getChatAvatar = () => {
+    const chat = activeChat as any;
+    if (!chat) return null;
+    if (chat.type === 'DIRECT') {
+      const other = chat.members?.find((m: any) => m.userId !== userId);
+      return other?.user?.avatar;
+    }
+    return chat.avatar;
   };
 
   const getChatStatus = () => {
@@ -287,8 +297,12 @@ export default function ChatArea() {
           onClick={() => setShowInfo(!showInfo)}
           className="flex items-center gap-3 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
         >
-          <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold uppercase">
-            {getChatDisplayName().charAt(0)}
+          <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold uppercase overflow-hidden">
+            {getChatAvatar() ? (
+              <img src={getChatAvatar()} alt={getChatDisplayName()} className="w-full h-full object-cover" />
+            ) : (
+              getChatDisplayName().charAt(0)
+            )}
           </div>
           <div className="min-w-0">
             <h3 className="font-semibold text-text-primary text-sm truncate">{getChatDisplayName()}</h3>

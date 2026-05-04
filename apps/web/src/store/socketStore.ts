@@ -111,6 +111,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       useChatStore.getState().updateUserStatus(data.userId, data.status, data.lastSeen);
     });
 
+    // ── Слушаем обновление чата ──
+    socket.on('chat:update', (updatedChat) => {
+      console.log('[Socket] 🔄 chat:update', updatedChat.id);
+      useChatStore.getState().updateChat(updatedChat);
+    });
+
     set({ socket });
   },
 
