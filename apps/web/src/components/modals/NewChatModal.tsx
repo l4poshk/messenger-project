@@ -130,6 +130,7 @@ export default function NewChatModal() {
         </div>
 
         {/* Group name input */}
+        {mode !== 'direct' && (
           <div className="px-6 pt-3 flex flex-col gap-3">
             <input
               type="text"

@@ -72,7 +72,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       const { chats, updateChat } = useChatStore.getState();
       const chat = chats.find((c) => c.id === message.chatId);
       if (chat) {
-        updateChat({ ...chat, messages: [message] });
+        updateChat({ ...chat, messages: [message] } as any);
       }
     });
 

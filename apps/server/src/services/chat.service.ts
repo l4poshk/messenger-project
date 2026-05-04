@@ -39,6 +39,7 @@ export async function getUserChats(userId: string) {
 // ── Создать чат (DIRECT / GROUP / SUPERGROUP) ──
 
 export async function createChat(
+  userId: string,
   type: ChatType,
   memberIds: string[],
   name?: string,

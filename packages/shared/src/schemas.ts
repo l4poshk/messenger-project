@@ -47,6 +47,7 @@ export const createChatSchema = z.object({
   type: z.enum(['DIRECT', 'GROUP', 'SUPERGROUP']),
   name: z.string().min(1).max(64).optional(),
   memberIds: z.array(z.string()).min(1),
+  description: z.string().max(1000).optional(),
 });
 
 export const addMemberSchema = z.object({

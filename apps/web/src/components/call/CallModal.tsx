@@ -10,11 +10,14 @@ const STUN_SERVERS = {
   iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
 };
 
-const getSafeMediaStream = async () => {
+const getSafeMediaStream = async (type: 'audio' | 'video') => {
   try {
-    return await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+    return await navigator.mediaDevices.getUserMedia({
+      video: type === 'video',
+      audio: true
+    });
   } catch (err) {
-    console.warn('[Call] Failed to get video+audio, falling back to audio only', err);
+    console.warn('[Call] Failed to get requested media, falling back to audio only', err);
     try {
       return await navigator.mediaDevices.getUserMedia({ video: false, audio: true });
     } catch (fallbackErr) {
@@ -29,7 +32,7 @@ const CALL_TIMEOUT_MS = 30_000; // 30 seconds
 export default function CallModal() {
   const socket = useSocketStore((state) => state.socket);
   const currentUser = useAuthStore((state) => state.user);
-  const { status, chatId, callerId, pendingOffer, setIncomingCall, acceptCall, endCall, resetCall } = useCallStore();
+  const { status, callType, chatId, callerId, pendingOffer, setIncomingCall, acceptCall, endCall, resetCall } = useCallStore();
 
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
@@ -50,8 +53,8 @@ export default function CallModal() {
       // Ignore our own offers just in case
       if (payload.callerId === currentUser?.id) return;
 
-      console.log('[Call] Incoming offer from', payload.callerId);
-      setIncomingCall(payload.chatId, payload.callerId, payload.offer);
+      console.log('[Call] Incoming offer from', payload.callerId, 'type:', payload.type);
+      setIncomingCall(payload.chatId, payload.callerId, payload.offer, payload.type || 'video');
     };
 
     const handleAnswer = async (payload: any) => {
@@ -166,7 +169,7 @@ export default function CallModal() {
     acceptCall();
 
     try {
-      const stream = await getSafeMediaStream();
+      const stream = await getSafeMediaStream(callType);
       setLocalStream(stream);
 
       const pc = new RTCPeerConnection(STUN_SERVERS);
@@ -210,7 +213,7 @@ export default function CallModal() {
     if (status === 'outgoing' && chatId && !pcRef.current) {
       const initOutgoing = async () => {
         try {
-          const stream = await getSafeMediaStream();
+          const stream = await getSafeMediaStream(callType);
           setLocalStream(stream);
 
           const pc = new RTCPeerConnection(STUN_SERVERS);
@@ -235,7 +238,7 @@ export default function CallModal() {
             chatId,
             callerId: currentUser?.id,
             offer,
-            type: 'video',
+            type: callType,
           });
 
           // ── Start 30s timeout ──
@@ -273,26 +276,28 @@ export default function CallModal() {
       {status !== 'idle' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
           {status === 'incoming' && (
-            <div className="bg-elevated p-6 rounded-2xl flex flex-col items-center gap-6 animate-in zoom-in-95 duration-200">
-              <div className="w-20 h-20 bg-accent/20 rounded-full flex items-center justify-center animate-pulse">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
-                </svg>
+            <div className="bg-elevated p-8 rounded-2xl flex flex-col items-center gap-6 animate-in zoom-in-95 duration-200 shadow-2xl border border-white/5">
+              <div className="relative">
+                <div className="w-24 h-24 bg-accent/20 rounded-full flex items-center justify-center animate-pulse overflow-hidden">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"></path>
+                  </svg>
+                </div>
               </div>
               <div className="text-center">
-                <h2 className="text-xl font-semibold">Incoming Call</h2>
-                <p className="text-text-muted mt-1">Someone is calling you</p>
+                <h2 className="text-2xl font-bold text-text-primary">Incoming {callType === 'audio' ? 'Audio' : 'Video'} Call</h2>
+                <p className="text-text-muted mt-2">Connecting you with a peer...</p>
               </div>
-              <div className="flex gap-4">
+              <div className="flex gap-4 w-full">
                 <button
                   onClick={handleReject}
-                  className="px-6 py-3 rounded-xl bg-danger hover:bg-danger/80 text-white font-medium transition-colors flex items-center gap-2"
+                  className="flex-1 px-6 py-4 rounded-2xl bg-danger hover:bg-danger/80 text-white font-bold transition-all flex items-center justify-center gap-2 shadow-lg"
                 >
-                  Reject
+                  Decline
                 </button>
                 <button
                   onClick={handleAccept}
-                  className="px-6 py-3 rounded-xl bg-accent hover:bg-accent-hover text-accent-dark font-medium transition-colors flex items-center gap-2"
+                  className="flex-1 px-6 py-4 rounded-2xl bg-accent hover:bg-accent-hover text-accent-dark font-bold transition-all flex items-center justify-center gap-2 shadow-lg"
                 >
                   Accept
                 </button>
@@ -303,7 +308,7 @@ export default function CallModal() {
           {(status === 'active' || status === 'outgoing') && (
             <div className="relative w-full max-w-4xl aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-300">
               {/* Remote Video (Full Screen) */}
-              {remoteStream ? (
+              {remoteStream && callType === 'video' ? (
                 <>
                   <video
                     ref={remoteVideoRef}
@@ -319,36 +324,52 @@ export default function CallModal() {
                           <circle cx="12" cy="7" r="4"></circle>
                         </svg>
                       </div>
-                      <span className="text-white font-medium text-lg">Audio Call</span>
+                      <span className="text-white font-medium text-lg">Peer Video Off</span>
                     </div>
                   )}
                 </>
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-white/50 text-xl font-medium">
-                  {status === 'outgoing' ? 'Calling...' : 'Waiting for video...'}
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-secondary/80">
+                  <div className="relative">
+                    <div className="w-32 h-32 bg-accent/10 rounded-full flex items-center justify-center border-2 border-accent/20 animate-pulse">
+                      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="12" cy="7" r="4"></circle>
+                      </svg>
+                    </div>
+                  </div>
+                  <div className="mt-6 text-center">
+                    <span className="text-2xl font-bold text-text-primary block">
+                      {status === 'outgoing' ? 'Calling...' : 'Voice Call'}
+                    </span>
+                    <span className="text-text-muted mt-2 block">
+                      {status === 'outgoing' ? 'Waiting for answer' : '00:00'}
+                    </span>
+                  </div>
                 </div>
               )}
 
-              {/* Local Video (PiP) */}
-              <div className="absolute bottom-6 right-6 w-48 aspect-video bg-elevated rounded-xl overflow-hidden shadow-lg border border-white/10 flex items-center justify-center">
-                {localStream?.getVideoTracks().length === 0 ? (
-                  <div className="text-white/50 flex flex-col items-center">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <line x1="12" x2="12" y1="19" y2="22" />
-                    </svg>
-                  </div>
-                ) : (
-                  <video
-                    ref={localVideoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                )}
-              </div>
+              {callType === 'video' && (
+                <div className="absolute bottom-6 right-6 w-48 aspect-video bg-elevated rounded-xl overflow-hidden shadow-lg border border-white/10 flex items-center justify-center">
+                  {localStream?.getVideoTracks().length === 0 ? (
+                    <div className="text-white/50 flex flex-col items-center">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                        <line x1="12" x2="12" y1="19" y2="22" />
+                      </svg>
+                    </div>
+                  ) : (
+                    <video
+                      ref={localVideoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                </div>
+              )}
 
               {/* Controls */}
               <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-4 bg-black/50 backdrop-blur-md px-6 py-3 rounded-full">

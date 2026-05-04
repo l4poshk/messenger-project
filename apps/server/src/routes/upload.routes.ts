@@ -166,7 +166,7 @@ uploadRouter.post('/chat-avatar/:chatId', upload.single('file'), async (req, res
 
     // 2. Update Chat via chatService (handles permissions internally)
     const updatedChat = await chatService.updateChat(
-      req.params.chatId,
+      req.params.chatId as string,
       req.user!.userId,
       { avatar: result.url }
     );

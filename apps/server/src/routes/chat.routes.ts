@@ -27,7 +27,8 @@ chatRouter.post('/', async (req, res, next) => {
       req.user!.userId,
       input.type as any,
       input.memberIds,
-      input.name
+      input.name,
+      input.description
     );
 
     // Рассылаем событие всем участникам нового чата
