@@ -10,6 +10,7 @@ import { api } from '@/lib/api';
 import TopicBar from '@/components/chat/TopicBar';
 import AudioPlayer from '@/components/chat/AudioPlayer';
 import VoiceRecorder from '@/components/chat/VoiceRecorder';
+import ChatInfoPanel from '@/components/chat/ChatInfoPanel';
 import type { Message, Topic } from '@messenger/shared';
 
 const EMPTY_MESSAGES: Message[] = [];
@@ -37,6 +38,7 @@ export default function ChatArea() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -99,6 +101,55 @@ export default function ChatArea() {
       return other?.user?.username || 'Chat';
     }
     return chat.name || 'Group';
+  };
+
+  const getChatStatus = () => {
+    const chat = activeChat as any;
+    if (!chat) return null;
+
+    if (chat.type === 'DIRECT') {
+      const other = chat.members?.find((m: any) => m.userId !== userId)?.user;
+      if (!other) return null;
+
+      const isOnline =
+        other.status === 'ONLINE' ||
+        (other.lastSeen && Date.now() - new Date(other.lastSeen).getTime() < 5 * 60 * 1000);
+
+      if (isOnline) {
+        return (
+          <span className="flex items-center gap-1 text-accent">
+            <span className="w-1 h-1 rounded-full bg-accent" />
+            Online
+          </span>
+        );
+      }
+
+      if (other.lastSeen) {
+        return `Last seen ${formatLastSeen(other.lastSeen)}`;
+      }
+
+      return 'Offline';
+    }
+
+    return `${chat.members?.length || 0} members`;
+  };
+
+  const formatLastSeen = (date: string) => {
+    const d = new Date(date);
+    const now = new Date();
+    const diff = now.getTime() - d.getTime();
+
+    // Less than 1 minute
+    if (diff < 60000) return 'just now';
+
+    const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (d.toDateString() === now.toDateString()) return `today at ${time}`;
+
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    if (d.toDateString() === yesterday.toDateString()) return `yesterday at ${time}`;
+
+    return `${d.toLocaleDateString([], { day: 'numeric', month: 'short' })} at ${time}`;
   };
 
   // ── File selection ──
@@ -232,7 +283,10 @@ export default function ChatArea() {
     <main className="flex-1 flex flex-col bg-primary min-w-0">
       {/* Header */}
       <header className="h-14 border-b border-border flex items-center px-4 shrink-0 bg-primary/80 backdrop-blur-sm z-10">
-        <div className="flex items-center gap-3 flex-1">
+        <div
+          onClick={() => setShowInfo(!showInfo)}
+          className="flex items-center gap-3 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 rounded-full bg-accent/10 flex items-center justify-center text-accent text-xs font-bold uppercase">
             {getChatDisplayName().charAt(0)}
           </div>
@@ -244,7 +298,7 @@ export default function ChatArea() {
               </p>
             ) : (
               <p className="text-[10px] text-text-hint">
-                {(activeChat as any)?.members?.length || 0} members
+                {getChatStatus()}
               </p>
             )}
           </div>
@@ -449,6 +503,14 @@ export default function ChatArea() {
           )}
         </form>
       </div>
+
+      {/* ── Chat Info Panel ── */}
+      {showInfo && activeChat && (
+        <ChatInfoPanel
+          chat={activeChat}
+          onClose={() => setShowInfo(false)}
+        />
+      )}
     </main>
   );
 }

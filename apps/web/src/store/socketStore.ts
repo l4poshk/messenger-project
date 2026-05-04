@@ -105,6 +105,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       useNotificationStore.getState().addNotification(notification);
     });
 
+    // ── Слушаем статус пользователя ──
+    socket.on('user:status', (data: { userId: string; status: string; lastSeen: string }) => {
+      console.log('[Socket] 👤 user:status', data.userId, data.status);
+      useChatStore.getState().updateUserStatus(data.userId, data.status, data.lastSeen);
+    });
+
     set({ socket });
   },
 

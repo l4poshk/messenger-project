@@ -61,6 +61,37 @@ export function initSocket(server: HttpServer) {
     // Присоединяемся к личной комнате пользователя (для уведомлений)
     socket.join(`user:${userId}`);
 
+    // ── Update status to ONLINE ──
+    const updateStatus = async (status: 'ONLINE' | 'OFFLINE') => {
+      try {
+        const user = await prisma.user.update({
+          where: { id: userId },
+          data: {
+            status,
+            lastSeen: new Date(),
+          },
+        });
+
+        // Find all chats this user is in to notify others
+        const userChats = await prisma.member.findMany({
+          where: { userId },
+          select: { chatId: true },
+        });
+
+        for (const { chatId } of userChats) {
+          socket.to(`chat:${chatId}`).emit('user:status', {
+            userId,
+            status,
+            lastSeen: user.lastSeen,
+          });
+        }
+      } catch (err) {
+        logger.error(`Failed to update status for user ${userId}:`, err);
+      }
+    };
+
+    updateStatus('ONLINE');
+
     // Присоединение к комнате чата
     socket.on('chat:join', (chatId: string) => {
       socket.join(`chat:${chatId}`);
@@ -221,6 +252,7 @@ export function initSocket(server: HttpServer) {
 
     socket.on('disconnect', () => {
       logger.info(`🔌 Socket disconnected: ${username}`);
+      updateStatus('OFFLINE');
     });
   });
 

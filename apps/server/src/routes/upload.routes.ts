@@ -8,6 +8,7 @@ import { requireAuth } from '../middleware/requireAuth';
 import * as uploadService from '../services/upload.service';
 import { extractKeyFromUrl, getBufferFromR2, isR2Configured } from '../lib/r2';
 import { logger } from '../lib/logger';
+import { prisma } from '../lib/prisma';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -127,7 +128,24 @@ uploadRouter.post('/avatar', upload.single('file'), async (req, res, next) => {
       return;
     }
     const result = await uploadService.uploadAvatar(req.file);
-    res.json({ data: result, error: null });
+
+    // ── Update User record with new avatar URL ──
+    const updatedUser = await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { avatar: result.url },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        avatar: true,
+        description: true,
+        status: true,
+        lastSeen: true,
+        createdAt: true,
+      },
+    });
+
+    res.json({ data: updatedUser, error: null });
   } catch (err) {
     next(err);
   }

@@ -10,18 +10,23 @@ import { useUiStore, type ActivePanel } from '@/store/uiStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { removeAuthCookie } from '@/lib/cookies';
 import { useRouter } from 'next/navigation';
+import { useTheme } from 'next-themes';
 import { api } from '@/lib/api';
+import { useEffect, useState } from 'react';
 
 export default function IconNav() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
   const refreshToken = useAuthStore((s) => s.refreshToken);
   const logout = useAuthStore((s) => s.logout);
-  const toggleTheme = useUiStore((s) => s.toggleTheme);
   const activePanel = useUiStore((s) => s.activePanel);
   const setActivePanel = useUiStore((s) => s.setActivePanel);
-  const theme = useUiStore((s) => s.theme);
   const unreadCount = useNotificationStore((s) => s.unreadCount);
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  // Avoid hydration mismatch
+  useEffect(() => setMounted(true), []);
 
   const handleLogout = async () => {
     if (refreshToken) {
@@ -30,6 +35,10 @@ export default function IconNav() {
     logout();
     removeAuthCookie();
     router.push('/login');
+  };
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
   };
 
   return (
@@ -67,8 +76,8 @@ export default function IconNav() {
       {/* ── Bottom actions ── */}
       <NavButton
         id="nav-theme"
-        icon={theme === 'dark' ? 'theme' : 'moon'}
-        label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        icon={mounted && resolvedTheme === 'dark' ? 'theme' : 'moon'}
+        label={`Switch to ${mounted && resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
         onClick={toggleTheme}
       />
       <NavButton id="nav-settings" icon="settings" label="Settings" active={activePanel === 'settings'} onClick={() => setActivePanel('settings')} />

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { ThemeProvider } from '@/components/providers/ThemeProvider';
 
 export const metadata: Metadata = {
   title: 'Messenger',
@@ -12,22 +13,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
-      <head>
-        {/* Apply persisted theme before first paint to avoid flash */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                const stored = JSON.parse(localStorage.getItem('messenger-ui') || '{}');
-                const theme = stored?.state?.theme || 'dark';
-                document.documentElement.className = theme;
-              } catch (e) {}
-            `,
-          }}
-        />
-      </head>
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   );
 }

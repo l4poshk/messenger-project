@@ -18,10 +18,14 @@ async function request<T>(
   const { body, headers: customHeaders, ...rest } = options;
   const accessToken = useAuthStore.getState().accessToken;
 
+  const isFormData = body instanceof FormData;
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...((customHeaders as Record<string, string>) || {}),
   };
+
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (accessToken) {
     headers['Authorization'] = `Bearer ${accessToken}`;
@@ -32,7 +36,7 @@ async function request<T>(
   let response = await fetch(url, {
     ...rest,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: isFormData ? (body as any) : body ? JSON.stringify(body) : undefined,
   });
 
   // ── Auto-refresh on 401 ──
@@ -44,7 +48,7 @@ async function request<T>(
       response = await fetch(url, {
         ...rest,
         headers,
-        body: body ? JSON.stringify(body) : undefined,
+        body: isFormData ? (body as any) : body ? JSON.stringify(body) : undefined,
       });
     }
   }

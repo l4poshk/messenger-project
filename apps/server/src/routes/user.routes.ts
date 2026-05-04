@@ -20,7 +20,10 @@ userRouter.get('/search', async (req, res, next) => {
 
     const users = await prisma.user.findMany({
       where: {
-        username: { contains: q, mode: 'insensitive' },
+        OR: [
+          { id: q },
+          { username: { contains: q, mode: 'insensitive' } }
+        ],
         id: { not: req.user!.userId }
       },
       select: {

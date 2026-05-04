@@ -5,13 +5,14 @@
 // Notifications, and Settings panels
 // ──────────────────────────────────────────────
 
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useUiStore } from '@/store/uiStore';
 import { useNotificationStore } from '@/store/notificationStore';
 import { useContactStore } from '@/store/contactStore';
 import { removeAuthCookie } from '@/lib/cookies';
+import { useTheme } from 'next-themes';
 import { api } from '@/lib/api';
 import type { Chat, User } from '@messenger/shared';
 
@@ -452,15 +453,27 @@ function NotificationsPanel() {
 
 function SettingsPanel() {
   const user = useAuthStore((s) => s.user);
+  const setUser = useAuthStore((s) => s.setUser);
   const refreshToken = useAuthStore((s) => s.refreshToken);
-  const theme = useUiStore((s) => s.theme);
-  const toggleTheme = useUiStore((s) => s.toggleTheme);
   const logout = useAuthStore((s) => s.logout);
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
   const [username, setUsername] = useState(user?.username || '');
   const [status, setStatus] = useState(user?.status || '');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Avoid hydration mismatch
+  useEffect(() => setMounted(true), []);
+
+  const toggleTheme = () => {
+    setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+  };
 
   // Sync when user changes
   useEffect(() => {
@@ -472,17 +485,52 @@ function SettingsPanel() {
     setSaving(true);
     setSaved(false);
     try {
-      await api.patch('/users/me', {
+      const res = await api.patch<User>('/users/me', {
         username: username.trim() || user?.username,
         status: status.trim(),
       });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      if (res.data) {
+        setUser(res.data);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
     } catch (err) {
       console.error('[Settings] Save failed', err);
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAvatarClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await api.post<User>('/upload/avatar', formData);
+      if (res.data) {
+        setUser(res.data);
+      }
+    } catch (err) {
+      console.error('[Settings] Avatar upload failed', err);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCopyId = () => {
+    if (!user?.id) return;
+    navigator.clipboard.writeText(user.id);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   const handleLogout = async () => {
@@ -501,9 +549,40 @@ function SettingsPanel() {
       <div className="flex-1 overflow-y-auto no-scrollbar px-3 py-4 space-y-5">
         {/* ── Profile Header ── */}
         <div className="flex flex-col items-center py-6 px-4 rounded-2xl bg-elevated">
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-accent to-accent/60 flex items-center justify-center text-white text-3xl font-bold uppercase shadow-lg mb-4">
-            {user?.username?.charAt(0) || '?'}
+          <div
+            onClick={handleAvatarClick}
+            className="group relative w-20 h-20 rounded-full cursor-pointer overflow-hidden shadow-lg mb-4"
+          >
+            {user?.avatar ? (
+              <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-accent to-accent/60 flex items-center justify-center text-white text-3xl font-bold uppercase">
+                {user?.username?.charAt(0) || '?'}
+              </div>
+            )}
+            
+            {/* Overlay */}
+            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+              </svg>
+            </div>
+
+            {uploading && (
+              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
           </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileChange}
+          />
           <p className="text-lg font-semibold text-text-primary">{user?.username}</p>
           <p className="text-xs text-text-muted mt-0.5">{user?.email || 'No email'}</p>
           {user?.status && (
@@ -568,7 +647,7 @@ function SettingsPanel() {
           >
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-elevated flex items-center justify-center text-text-muted">
-                {theme === 'dark' ? (
+                {mounted && resolvedTheme === 'dark' ? (
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" />
                     <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
@@ -584,10 +663,10 @@ function SettingsPanel() {
               <span className="text-sm text-text-primary">Dark mode</span>
             </div>
             <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${
-              theme === 'dark' ? 'bg-accent' : 'bg-text-hint/30'
+              mounted && resolvedTheme === 'dark' ? 'bg-accent' : 'bg-text-hint/30'
             }`}>
               <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-                theme === 'dark' ? 'translate-x-4' : 'translate-x-0'
+                mounted && resolvedTheme === 'dark' ? 'translate-x-4' : 'translate-x-0'
               }`} />
             </div>
           </button>
@@ -597,9 +676,27 @@ function SettingsPanel() {
         <div className="space-y-1">
           <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-3">Account Info</p>
           <div className="px-3 py-2 space-y-2">
-            <div className="flex justify-between text-xs">
+            <div className="flex items-center justify-between text-xs">
               <span className="text-text-muted">User ID</span>
-              <span className="text-text-hint font-mono truncate ml-4 max-w-[140px]">{user?.id}</span>
+              <div className="flex items-center gap-2 max-w-[160px]">
+                <span className="text-text-hint font-mono truncate">{user?.id}</span>
+                <button
+                  onClick={handleCopyId}
+                  className={`p-1 rounded transition-colors ${copied ? 'text-accent' : 'text-text-hint hover:text-text-primary hover:bg-elevated'}`}
+                  title="Copy ID"
+                >
+                  {copied ? (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                    </svg>
+                  )}
+                </button>
+              </div>
             </div>
             <div className="flex justify-between text-xs">
               <span className="text-text-muted">Joined</span>
