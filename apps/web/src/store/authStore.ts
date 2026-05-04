@@ -5,6 +5,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User } from '@messenger/shared';
+import { useChatStore } from './chatStore';
+import { useMessageStore } from './messageStore';
+import { useCallStore } from './callStore';
 
 interface AuthState {
   // ── State ──
@@ -49,14 +52,24 @@ export const useAuthStore = create<AuthState>()(
 
       setLoading: (isLoading) => set({ isLoading }),
 
-      logout: () =>
+      logout: () => {
+        // Clear all other stores
+        useChatStore.getState().reset();
+        useMessageStore.getState().reset();
+        useCallStore.getState().resetCall();
+
+        // Reset auth state
         set({
           user: null,
           accessToken: null,
           refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
-        }),
+        });
+
+        // Redirect to login (optional, but good for UI)
+        window.location.href = '/login';
+      },
     }),
     {
       name: 'messenger-auth',

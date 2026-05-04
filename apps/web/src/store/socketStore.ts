@@ -88,6 +88,16 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       });
     });
 
+    // ── Слушаем создание новых чатов ──
+    socket.on('chat:new', (newChat) => {
+      console.log('[Socket] 🆕 chat:new', newChat.id);
+      const { chats, setChats } = useChatStore.getState();
+      // Добавляем, только если его еще нет в списке
+      if (!chats.find((c) => c.id === newChat.id)) {
+        setChats([newChat, ...chats]);
+      }
+    });
+
     set({ socket });
   },
 

@@ -5,6 +5,7 @@ interface MessageState {
   messages: Record<string, Message[]>; // chatId -> messages[]
   setMessages: (chatId: string, messages: Message[]) => void;
   addMessage: (message: Message) => void;
+  reset: () => void;
 }
 
 export const useMessageStore = create<MessageState>((set) => ({
@@ -21,4 +22,5 @@ export const useMessageStore = create<MessageState>((set) => ({
       }
     };
   }),
+  reset: () => set({ messages: {} }),
 }));

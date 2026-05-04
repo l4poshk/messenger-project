@@ -5,6 +5,15 @@ import { logger } from './logger';
 import { prisma } from './prisma';
 import { env } from './env';
 
+let ioInstance: Server;
+
+export function getIO(): Server {
+  if (!ioInstance) {
+    throw new Error('Socket.io is not initialized');
+  }
+  return ioInstance;
+}
+
 export function initSocket(server: HttpServer) {
   const io = new Server(server, {
     cors: {
@@ -16,6 +25,8 @@ export function initSocket(server: HttpServer) {
     transports: ['polling', 'websocket'],
     allowEIO3: true,
   });
+
+  ioInstance = io;
 
   logger.info(`🔌 Socket.io initialized, CORS origin: ${env.CLIENT_URL}`);
 

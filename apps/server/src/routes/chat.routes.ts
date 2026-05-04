@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/requireAuth';
 import { createChatSchema, createTopicSchema } from '@messenger/shared';
 import * as chatService from '../services/chat.service';
+import { getIO } from '../lib/socket';
 
 export const chatRouter = Router();
 chatRouter.use(requireAuth);
@@ -28,6 +29,15 @@ chatRouter.post('/', async (req, res, next) => {
       input.memberIds,
       input.name
     );
+
+    // Рассылаем событие всем участникам нового чата
+    const io = getIO();
+    if (chat.members) {
+      chat.members.forEach((m: any) => {
+        io.to(`user:${m.userId}`).emit('chat:new', chat);
+      });
+    }
+
     res.status(201).json({ data: chat, error: null });
   } catch (err) { next(err); }
 });

@@ -7,6 +7,7 @@ interface ChatState {
   setChats: (chats: Chat[]) => void;
   setActiveChat: (chatId: string | null) => void;
   updateChat: (chat: Chat) => void;
+  reset: () => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -17,4 +18,5 @@ export const useChatStore = create<ChatState>((set) => ({
   updateChat: (updatedChat) => set((state) => ({
     chats: state.chats.map(c => c.id === updatedChat.id ? updatedChat : c)
   })),
+  reset: () => set({ chats: [], activeChatId: null }),
 }));
