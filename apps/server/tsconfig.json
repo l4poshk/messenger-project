@@ -5,17 +5,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "module": "CommonJS",
-    "moduleResolution": "node",
-    "paths": {
-      "@messenger/shared": [
-        "../../packages/shared/src"
-      ],
-      "@messenger/shared/*": [
-        "../../packages/shared/src/*"
-      ]
-    }
+    "moduleResolution": "node"
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
   ]
 }
