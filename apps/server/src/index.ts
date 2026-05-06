@@ -64,10 +64,14 @@ app.use(errorHandler);
 const httpServer = createServer(app);
 initSocket(httpServer);
 
-httpServer.listen(env.PORT, () => {
-  logger.info(`🚀 Server running on http://localhost:${env.PORT}`);
+// Railway требует 0.0.0.0, чтобы пропустить трафик внутрь контейнера
+const PORT = env.PORT || 8080;
+
+httpServer.listen(PORT, "0.0.0.0", () => {
+  logger.info(`🚀 Server running on port ${PORT}`);
   logger.info(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   logger.info(`   Client URL:  ${env.CLIENT_URL}`);
+  logger.info(`   Host:        0.0.0.0`);
 });
 
 export default app;
