@@ -107,16 +107,16 @@ export interface TypingPayload {
 export interface CallOfferPayload {
   chatId: string;
   callerId: string;
-  offer: RTCSessionDescriptionInit;
+  offer: any; // Using any because RTCSessionDescriptionInit is a DOM-only type
   type: 'audio' | 'video';
 }
 
 export interface CallAnswerPayload {
   chatId: string;
-  answer: RTCSessionDescriptionInit;
+  answer: any;
 }
 
 export interface IceCandidatePayload {
   chatId: string;
-  candidate: RTCIceCandidateInit;
+  candidate: any;
 }

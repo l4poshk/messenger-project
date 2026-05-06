@@ -188,52 +188,114 @@ export function initSocket(server: HttpServer) {
       });
     });
 
-    // ── WebRTC Signaling ──
-    socket.on('call:offer', (payload: any) => {
-      // Forward offer via chat room AND directly to all members' user rooms
-      socket.to(`chat:${payload.chatId}`).emit('call:offer', payload);
+    // ── Group Call State (In-memory) ──
+    // chatId -> Set of userIds
+    const activeCalls = new Map<string, Set<string>>();
 
-      // Also send via user rooms for reliability (recipient may not have chat open)
-      prisma.member.findMany({
+    // ── WebRTC Signaling (Group / Mesh) ──
+
+    socket.on('call:join', (payload: { chatId: string }) => {
+      const { chatId } = payload;
+      if (!activeCalls.has(chatId)) {
+        activeCalls.set(chatId, new Set());
+      }
+      
+      const participants = activeCalls.get(chatId)!;
+      
+      // Limit to 4 participants for mesh stability
+      if (participants.size >= 4 && !participants.has(userId)) {
+        socket.emit('call:error', { message: 'Call is full (max 4 participants)' });
+        return;
+      }
+
+      participants.add(userId);
+      socket.join(`call:${chatId}`);
+      
+      logger.info(`📞 User ${username} joined call in chat ${chatId}. Total: ${participants.size}`);
+
+      // Tell the joiner who else is in the call
+      const otherUsers = Array.from(participants).filter(id => id !== userId);
+      socket.emit('call:participants', { participants: otherUsers });
+
+      // Tell others that someone joined
+      socket.to(`call:${chatId}`).emit('call:user-joined', { userId, username });
+    });
+
+    socket.on('call:offer', (payload: { chatId: string; toUserId: string; offer: any; type: string }) => {
+      // Send offer directly to the specific user
+      logger.debug(`📞 Offer from ${username} to user ${payload.toUserId}`);
+      io.to(`user:${payload.toUserId}`).emit('call:offer', {
+        chatId: payload.chatId,
+        callerId: userId, // Current sender is the caller for this peer connection
+        offer: payload.offer,
+        type: payload.type
+      });
+    });
+
+    socket.on('call:answer', (payload: { chatId: string; toUserId: string; answer: any }) => {
+      logger.debug(`📞 Answer from ${username} to user ${payload.toUserId}`);
+      io.to(`user:${payload.toUserId}`).emit('call:answer', {
+        chatId: payload.chatId,
+        userId: userId,
+        answer: payload.answer
+      });
+    });
+
+    socket.on('call:ice-candidate', (payload: { chatId: string; toUserId: string; candidate: any }) => {
+      io.to(`user:${payload.toUserId}`).emit('call:ice-candidate', {
+        chatId: payload.chatId,
+        userId: userId,
+        candidate: payload.candidate
+      });
+    });
+
+    socket.on('call:leave', (payload: { chatId: string }) => {
+      const participants = activeCalls.get(payload.chatId);
+      if (participants) {
+        participants.delete(userId);
+        if (participants.size === 0) {
+          activeCalls.delete(payload.chatId);
+        }
+      }
+      socket.leave(`call:${payload.chatId}`);
+      socket.to(`call:${payload.chatId}`).emit('call:user-left', { userId });
+      logger.info(`📞 User ${username} left call in chat ${payload.chatId}`);
+    });
+
+    // ── Legacy / Initial signaling for incoming call notification ──
+    // This is still needed to "ring" the recipients who aren't in the call yet
+    socket.on('call:start', async (payload: { chatId: string; type: 'audio' | 'video' }) => {
+      const members = await prisma.member.findMany({
         where: { chatId: payload.chatId },
         select: { userId: true },
-      }).then((members) => {
-        members.forEach((m) => {
-          if (m.userId !== userId) {
-            io.to(`user:${m.userId}`).emit('call:offer', payload);
-          }
-        });
-      }).catch(() => {});
-    });
+      });
 
-    socket.on('call:answer', (payload: any) => {
-      socket.to(`chat:${payload.chatId}`).emit('call:answer', payload);
-    });
-
-    socket.on('call:ice-candidate', (payload: any) => {
-      socket.to(`chat:${payload.chatId}`).emit('call:ice-candidate', payload);
-    });
-
-    // Normal end (during active call, or manual hang-up)
-    socket.on('call:end', (payload: { chatId: string }) => {
-      socket.to(`chat:${payload.chatId}`).emit('call:end');
+      members.forEach((m) => {
+        if (m.userId !== userId) {
+          io.to(`user:${m.userId}`).emit('call:incoming', {
+            chatId: payload.chatId,
+            callerId: userId,
+            callerName: username,
+            type: payload.type
+          });
+        }
+      });
     });
 
     // ── Cancel / Timeout — initiator hangs up before answer ──
     socket.on('call:cancel', async (payload: { chatId: string; recipientId: string }) => {
       logger.info(`📞 Call cancelled by ${username} in chat ${payload.chatId}`);
 
-      // Close recipient's incoming-call modal via their personal user room
       if (payload.recipientId) {
         io.to(`user:${payload.recipientId}`).emit('call:cancelled');
+      } else {
+        socket.to(`chat:${payload.chatId}`).emit('call:cancelled');
       }
-      // Also broadcast to chat room as fallback
-      socket.to(`chat:${payload.chatId}`).emit('call:cancelled');
 
       // Create missed-call notification
       if (payload.recipientId) {
         try {
-          const notification = await prisma.notification.create({
+          await prisma.notification.create({
             data: {
               userId: payload.recipientId,
               chatId: payload.chatId,
@@ -242,8 +304,7 @@ export function initSocket(server: HttpServer) {
               body: 'The caller hung up — no answer.',
             },
           });
-          io.to(`user:${payload.recipientId}`).emit('notification:new', notification);
-          logger.info(`📞 Missed call notification sent to ${payload.recipientId}`);
+          io.to(`user:${payload.recipientId}`).emit('notification:new');
         } catch (err) {
           logger.error('Failed to create missed-call notification:', err);
         }

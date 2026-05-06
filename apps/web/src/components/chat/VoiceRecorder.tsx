@@ -86,7 +86,7 @@ export default function VoiceRecorder({ onSend, disabled }: VoiceRecorderProps) 
 
   const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
       if (stream.getAudioTracks().length === 0) throw new Error('No audio tracks found.');
       
       streamRef.current = stream;
@@ -121,7 +121,7 @@ export default function VoiceRecorder({ onSend, disabled }: VoiceRecorderProps) 
 
       const checkVolume = () => {
         if (!analyserRef.current || !dataArrayRef.current) return;
-        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
         
         let sum = 0;
         for (let i = 0; i < bufferLength; i++) {

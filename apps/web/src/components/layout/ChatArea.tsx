@@ -318,8 +318,8 @@ export default function ChatArea() {
           </div>
         </div>
 
-        {/* Call Buttons (only for DIRECT chats) */}
-        {activeChat?.type === 'DIRECT' && (
+        {/* Call Buttons (Available for all chats) */}
+        {activeChat && (
           <div className="flex items-center ml-4">
             <button
               onClick={() => useCallStore.getState().setOutgoingCall(activeChatId!, 'audio')}
