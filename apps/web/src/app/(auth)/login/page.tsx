@@ -4,7 +4,7 @@
 // Login page — /login
 // ──────────────────────────────────────────────
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -20,7 +20,7 @@ interface LoginResponse {
   refreshToken: string;
 }
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get('redirect') || '/';
@@ -141,5 +141,13 @@ export default function LoginPage() {
         </Link>
       </p>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="text-text-muted text-center p-8">Loading...</div>}>
+      <LoginForm />
+    </Suspense>
   );
 }
