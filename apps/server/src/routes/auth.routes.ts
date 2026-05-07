@@ -10,6 +10,15 @@ import { logger } from '../lib/logger';
 
 export const authRouter = Router();
 
+const isProduction = process.env.NODE_ENV === 'production';
+
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: isProduction, // Only true in production (requires HTTPS)
+  sameSite: (isProduction ? 'none' : 'lax') as const,
+  maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+};
+
 // ── POST /api/auth/register ──
 
 authRouter.post(
@@ -17,12 +26,13 @@ authRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = registerSchema.parse(req.body);
-      const result = await authService.register(input);
+      const { user, accessToken, refreshToken } = await authService.register(input);
 
-      logger.info(`POST /api/auth/register — success (${result.user.username})`);
+      logger.info(`POST /api/auth/register — success (${user.username})`);
 
+      res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
       res.status(201).json({
-        data: result,
+        data: { user, accessToken },
         error: null,
       });
     } catch (err) {
@@ -38,12 +48,13 @@ authRouter.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const input = loginSchema.parse(req.body);
-      const result = await authService.login(input);
+      const { user, accessToken, refreshToken } = await authService.login(input);
 
-      logger.info(`POST /api/auth/login — success (${result.user.username})`);
+      logger.info(`POST /api/auth/login — success (${user.username})`);
 
+      res.cookie('refreshToken', refreshToken, COOKIE_OPTIONS);
       res.status(200).json({
-        data: result,
+        data: { user, accessToken },
         error: null,
       });
     } catch (err) {
@@ -58,13 +69,14 @@ authRouter.post(
   '/refresh',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { refreshToken } = req.body as { refreshToken?: string };
-      const result = await authService.refresh(refreshToken || '');
+      const refreshToken = req.cookies.refreshToken;
+      const { user, accessToken, refreshToken: newRefreshToken } = await authService.refresh(refreshToken || '');
 
-      logger.info(`POST /api/auth/refresh — token rotated (${result.user.username})`);
+      logger.info(`POST /api/auth/refresh — token rotated (${user.username})`);
 
+      res.cookie('refreshToken', newRefreshToken, COOKIE_OPTIONS);
       res.status(200).json({
-        data: result,
+        data: { user, accessToken },
         error: null,
       });
     } catch (err) {
@@ -79,13 +91,14 @@ authRouter.post(
   '/logout',
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { refreshToken } = req.body as { refreshToken?: string };
-      const result = await authService.logout(refreshToken || '');
+      const refreshToken = req.cookies.refreshToken;
+      await authService.logout(refreshToken || '');
 
       logger.info('POST /api/auth/logout — success');
 
+      res.clearCookie('refreshToken');
       res.status(200).json({
-        data: result,
+        data: { message: 'Logged out successfully' },
         error: null,
       });
     } catch (err) {

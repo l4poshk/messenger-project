@@ -3,6 +3,7 @@
 // ──────────────────────────────────────────────
 
 import { useAuthStore } from '@/store/authStore';
+import { useSocketStore } from '@/store/socketStore';
 import type { ApiResponse } from '@messenger/shared';
 
 const getApiUrl = () => {
@@ -15,6 +16,18 @@ export const API_URL = getApiUrl();
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
 }
+
+let isRefreshing = false;
+let refreshSubscribers: ((token: string) => void)[] = [];
+
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+const onTokenRefreshed = (token: string) => {
+  refreshSubscribers.map((cb) => cb(token));
+  refreshSubscribers = [];
+};
 
 async function request<T>(
   endpoint: string,
@@ -38,63 +51,85 @@ async function request<T>(
 
   const url = `${API_URL}${endpoint}`;
 
-  let response = await fetch(url, {
+  const fetchOptions: RequestInit = {
     ...rest,
     headers,
     body: isFormData ? (body as any) : body ? JSON.stringify(body) : undefined,
-  });
+    credentials: 'include', // Important for httpOnly cookies
+  };
+
+  let response = await fetch(url, fetchOptions);
 
   // ── Auto-refresh on 401 ──
-  if (response.status === 401 && accessToken) {
-    const refreshed = await tryRefresh();
-    if (refreshed) {
-      // Retry with new token
-      headers['Authorization'] = `Bearer ${useAuthStore.getState().accessToken}`;
-      response = await fetch(url, {
-        ...rest,
-        headers,
-        body: isFormData ? (body as any) : body ? JSON.stringify(body) : undefined,
-      });
+  if (response.status === 401 && !endpoint.includes('/auth/refresh') && !endpoint.includes('/auth/login')) {
+    if (!isRefreshing) {
+      isRefreshing = true;
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        const newToken = useAuthStore.getState().accessToken!;
+        isRefreshing = false;
+        onTokenRefreshed(newToken);
+      } else {
+        isRefreshing = false;
+        useAuthStore.getState().logout();
+        throw new Error('Session expired');
+      }
     }
+
+    // Return a promise that resolves when the token is refreshed
+    return new Promise((resolve) => {
+      subscribeTokenRefresh(async (newToken: string) => {
+        // Retry with new token
+        const newHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
+        const newOptions = { ...fetchOptions, headers: newHeaders };
+        const retryResponse = await fetch(url, newOptions);
+        resolve((await retryResponse.json()) as ApiResponse<T>);
+      });
+    });
   }
 
-  const json = (await response.json()) as ApiResponse<T>;
-  return json;
+  // Handle errors like 500 or 404 that might not return JSON
+  const contentType = response.headers.get('content-type');
+  if (contentType && contentType.includes('application/json')) {
+    return (await response.json()) as ApiResponse<T>;
+  } else {
+    return { data: null, error: response.statusText } as any;
+  }
 }
 
 async function tryRefresh(): Promise<boolean> {
-  const refreshToken = useAuthStore.getState().refreshToken;
-  if (!refreshToken) {
-    useAuthStore.getState().logout();
-    return false;
-  }
-
   try {
     const response = await fetch(`${API_URL}/auth/refresh`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
+      credentials: 'include',
     });
 
     if (!response.ok) {
-      useAuthStore.getState().logout();
       return false;
     }
 
     const json = (await response.json()) as ApiResponse<{
       accessToken: string;
-      refreshToken: string;
     }>;
 
-    if (json.data) {
-      useAuthStore.getState().setTokens(json.data.accessToken, json.data.refreshToken);
+    if (json.data?.accessToken) {
+      const { accessToken } = json.data;
+      useAuthStore.getState().setTokens(accessToken);
+      
+      // Update socket token
+      const socket = useSocketStore.getState().socket;
+      if (socket) {
+        socket.auth = { token: accessToken };
+        // We don't necessarily need to reconnect immediately, 
+        // but the next reconnection will use the new token.
+      }
+
       return true;
     }
 
-    useAuthStore.getState().logout();
     return false;
-  } catch {
-    useAuthStore.getState().logout();
+  } catch (err) {
+    console.error('[API] Refresh error:', err);
     return false;
   }
 }

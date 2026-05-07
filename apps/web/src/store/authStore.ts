@@ -15,13 +15,12 @@ interface AuthState {
   // ── State ──
   user: User | null;
   accessToken: string | null;
-  refreshToken: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
 
   // ── Actions ──
-  setAuth: (user: User, accessToken: string, refreshToken: string) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
+  setAuth: (user: User, accessToken: string) => void;
+  setTokens: (accessToken: string) => void;
   setUser: (user: User) => void;
   setLoading: (loading: boolean) => void;
   logout: () => void;
@@ -33,22 +32,20 @@ export const useAuthStore = create<AuthState>()(
       // ── Initial state ──
       user: null,
       accessToken: null,
-      refreshToken: null,
       isAuthenticated: false,
       isLoading: false,
 
       // ── Actions ──
-      setAuth: (user, accessToken, refreshToken) =>
+      setAuth: (user, accessToken) =>
         set({
           user,
           accessToken,
-          refreshToken,
           isAuthenticated: true,
           isLoading: false,
         }),
 
-      setTokens: (accessToken, refreshToken) =>
-        set({ accessToken, refreshToken }),
+      setTokens: (accessToken) =>
+        set({ accessToken }),
 
       setUser: (user) => set({ user }),
 
@@ -66,22 +63,21 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
-          refreshToken: null,
           isAuthenticated: false,
           isLoading: false,
         });
 
-        // Redirect to login (optional, but good for UI)
-        window.location.href = '/login';
+        // Redirect to login
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
       },
     }),
     {
       name: 'messenger-auth',
-      // Only persist tokens and user, not loading state
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
       }),
     }

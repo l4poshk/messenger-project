@@ -21,10 +21,10 @@ export interface RefreshTokenPayload {
 // ── Constants ──
 
 const ACCESS_TOKEN_EXPIRES_IN = '15m';
-const REFRESH_TOKEN_EXPIRES_IN = '30d';
+const REFRESH_TOKEN_EXPIRES_IN = '7d';
 
 // How many seconds until refresh token expires (for Redis TTL)
-export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60; // 30 days
+export const REFRESH_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
 
 // ── Generate tokens ──
 
