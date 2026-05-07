@@ -4,6 +4,7 @@ import { useAuthStore } from './authStore';
 import { useMessageStore } from './messageStore';
 import { useChatStore } from './chatStore';
 import { useNotificationStore } from './notificationStore';
+import { useCallStore } from './callStore';
 
 interface SocketState {
   socket: Socket | null;
@@ -115,6 +116,26 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     socket.on('chat:update', (updatedChat) => {
       console.log('[Socket] 🔄 chat:update', updatedChat.id);
       useChatStore.getState().updateChat(updatedChat);
+    });
+
+    // ── WebRTC Signaling: Incoming Call (Global) ──
+    socket.on('call:incoming', (data: { chatId: string; callerId: string; callerName: string; type: 'audio' | 'video' }) => {
+      console.log('[Socket] 📞 call:incoming', data);
+      const callStatus = useCallStore.getState().status;
+      if (callStatus === 'idle') {
+        useCallStore.getState().setIncomingCall(
+          data.chatId,
+          data.callerId,
+          data.callerName,
+          null as any, // No offer in initial ringing
+          data.type
+        );
+      }
+    });
+
+    socket.on('call:cancelled', () => {
+      console.log('[Socket] 📞 call:cancelled');
+      useCallStore.getState().resetCall();
     });
 
     set({ socket });
