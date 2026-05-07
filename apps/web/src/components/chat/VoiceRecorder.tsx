@@ -7,6 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useAuthStore } from '@/store/authStore';
+import { api } from '@/lib/api';
 
 const WAVEFORM_BARS = 40; // Number of bars to generate for Telegram-like UI
 
@@ -176,16 +177,8 @@ export default function VoiceRecorder({ onSend, disabled }: VoiceRecorderProps) 
           formData.append('file', blob, `voice-${Date.now()}.webm`);
           formData.append('duration', String(duration));
 
-          const token = useAuthStore.getState().accessToken;
-          const res = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/upload/audio`,
-            {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${token}` },
-              body: formData,
-            }
-          );
-          const json = await res.json();
+          const res = await api.post<any>('/upload/audio', formData);
+          const json = res;
 
           if (json.data?.url) {
             onSend(json.data.url, json.data.duration || duration, finalWaveform);

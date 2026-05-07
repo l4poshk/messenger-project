@@ -6,6 +6,7 @@
 // ──────────────────────────────────────────────
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { API_URL } from '@/lib/api';
 
 interface AudioPlayerProps {
   src: string;
@@ -44,8 +45,7 @@ export default function AudioPlayer({ src, duration: propDuration, waveform, isO
     audioRef.current = audio;
     isFixingRef.current = false;
 
-    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
-    const proxiedSrc = `${apiBase}/upload/proxy?url=${encodeURIComponent(src)}`;
+    const proxiedSrc = `${API_URL}/upload/proxy?url=${encodeURIComponent(src)}`;
     console.log('[Audio] init, proxy:', proxiedSrc);
 
     // ── LOADED METADATA ──

@@ -193,17 +193,8 @@ export default function ChatArea() {
       const formData = new FormData();
       formData.append('file', imageFile);
 
-      const token = useAuthStore.getState().accessToken;
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api'}/upload/image`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-          body: formData,
-        }
-      );
-
-      const json = await res.json();
+      const res = await api.post<any>('/upload/image', formData);
+      const json = res;
       if (json.error) {
         console.error('[Upload] Error:', json.error);
         return null;

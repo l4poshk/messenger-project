@@ -5,7 +5,12 @@
 import { useAuthStore } from '@/store/authStore';
 import type { ApiResponse } from '@messenger/shared';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000/api';
+const getApiUrl = () => {
+  const base = (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000').replace(/\/+$/, '');
+  return base.endsWith('/api') ? base : `${base}/api`;
+};
+
+export const API_URL = getApiUrl();
 
 interface RequestOptions extends Omit<RequestInit, 'body'> {
   body?: unknown;
@@ -23,7 +28,7 @@ async function request<T>(
     ...((customHeaders as Record<string, string>) || {}),
   };
 
-  if (!isFormData) {
+  if (body && !isFormData) {
     headers['Content-Type'] = 'application/json';
   }
 
