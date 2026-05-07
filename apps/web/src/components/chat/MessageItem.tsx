@@ -32,7 +32,11 @@ export default function MessageItem({ message, isOwn, showAvatar, activeChatType
   // Cloudinary optimization helper
   const getOptimizedUrl = (url: string | null | undefined, type: 'thumb' | 'full' = 'thumb') => {
     if (!url) return '';
+    
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    // Check if it's a Cloudinary URL (either generic or specific to our cloud)
     if (!url.includes('cloudinary.com')) return url;
+    if (cloudName && !url.includes(cloudName)) return url;
     
     if (type === 'thumb') {
       return url.replace('/upload/', '/upload/q_auto,f_auto,w_400/');
