@@ -90,6 +90,9 @@ export const serverEnvSchema = z.object({
   R2_SECRET_ACCESS_KEY: z.string().default(''),
   R2_BUCKET_NAME: z.string().default(''),
   R2_PUBLIC_URL: z.string().default(''),
+  CLOUDINARY_CLOUD_NAME: z.string().default(''),
+  CLOUDINARY_API_KEY: z.string().default(''),
+  CLOUDINARY_API_SECRET: z.string().default(''),
   CLIENT_URL: z.string().min(1, 'CLIENT_URL is required'),
   PORT: z.coerce.number().default(4000),
 });

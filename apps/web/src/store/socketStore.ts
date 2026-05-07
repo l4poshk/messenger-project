@@ -78,7 +78,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     });
 
     // ── Слушаем статус печати ──
-    socket.on('typing:update', (data: { chatId: string; username: string; isTyping: boolean }) => {
+    socket.on('chat:typing', (data: { chatId: string; username: string; isTyping: boolean }) => {
       set((state) => {
         const currentTyping = state.typingUsers[data.chatId] || [];
         const newTyping = data.isTyping
@@ -88,6 +88,24 @@ export const useSocketStore = create<SocketState>((set, get) => ({
           typingUsers: { ...state.typingUsers, [data.chatId]: newTyping },
         };
       });
+    });
+
+    // ── Слушаем статус прочтения ──
+    socket.on('messages:read', (data: { chatId: string; readerId: string }) => {
+      console.log('[Socket] ✅ messages:read', data.chatId);
+      useMessageStore.getState().markAsRead(data.chatId);
+    });
+
+    socket.on('message:update', (message) => {
+      console.log('[Socket] 🔄 message:update', message.id);
+      useMessageStore.getState().updateMessage(message);
+    });
+
+    socket.on('message:hide', (data: { messageId: string }) => {
+      const activeChatId = useChatStore.getState().activeChatId;
+      if (activeChatId) {
+        useMessageStore.getState().hideMessage(activeChatId, data.messageId);
+      }
     });
 
     // ── Слушаем создание новых чатов ──

@@ -45,8 +45,11 @@ export default function AudioPlayer({ src, duration: propDuration, waveform, isO
     audioRef.current = audio;
     isFixingRef.current = false;
 
-    const proxiedSrc = `${API_URL}/upload/proxy?url=${encodeURIComponent(src)}`;
-    console.log('[Audio] init, proxy:', proxiedSrc);
+    const isExternal = src.startsWith('http');
+    const finalSrc = isExternal ? src : `${API_URL}/upload/proxy?url=${encodeURIComponent(src)}`;
+    
+    console.log('[Audio] init, src:', finalSrc);
+    audio.src = finalSrc;
 
     // ── LOADED METADATA ──
     const handleLoadedMetadata = () => {
@@ -98,212 +101,156 @@ export default function AudioPlayer({ src, duration: propDuration, waveform, isO
 
     // ── ENDED — ignore during fix! ──
     const handleEnded = () => {
-      if (isFixingRef.current) {
-        console.log('[Audio] 🚫 Ignoring false "ended" during fix');
-        return;
-      }
-      console.log('[Audio] Playback ended naturally');
+      if (isFixingRef.current) return;
       setIsPlaying(false);
-      setProgress(0);
       setCurrentTime(0);
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      setProgress(0);
     };
 
-    // ── PAUSE — ignore during fix! ──
-    const handlePause = () => {
-      if (isFixingRef.current) {
-        console.log('[Audio] 🚫 Ignoring false "pause" during fix');
-        return;
-      }
-      // Normal pause from user or system
-    };
-
-    // ── ERROR ──
-    const handleError = () => {
-      if (isFixingRef.current) {
-        console.log('[Audio] 🚫 Ignoring error during fix');
-        return;
-      }
-      const e = audio.error;
-      const msg = e ? `code=${e.code} ${e.message}` : 'unknown';
-      console.error('[Audio] ❌ Error:', msg);
-      setError(msg);
-      setIsPlaying(false);
+    const handleError = (e: any) => {
+      console.error('[Audio] element error:', audio.error);
+      setError('Format error');
     };
 
     audio.addEventListener('loadedmetadata', handleLoadedMetadata);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('seeked', handleSeeked);
     audio.addEventListener('ended', handleEnded);
-    audio.addEventListener('pause', handlePause);
     audio.addEventListener('error', handleError);
 
-    audio.src = proxiedSrc;
-    audio.load();
-
     return () => {
-      isFixingRef.current = false;
       audio.pause();
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('seeked', handleSeeked);
       audio.removeEventListener('ended', handleEnded);
-      audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('error', handleError);
-      audio.src = '';
       audioRef.current = null;
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
   }, [src, propDuration]);
 
-  // ── Progress animation loop ──
+  // ── Sync progress ──
+  const updateProgress = useCallback(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    setCurrentTime(audio.currentTime);
+    const dur = getDuration();
+    if (dur > 0) {
+      setProgress((audio.currentTime / dur) * 100);
+    }
+    animFrameRef.current = requestAnimationFrame(updateProgress);
+  }, [getDuration]);
+
   useEffect(() => {
-    if (!isPlaying) return;
-
-    const tick = () => {
-      const audio = audioRef.current;
-      if (!audio || isFixingRef.current) return;
-
-      const ct = audio.currentTime;
-      setCurrentTime(ct);
-      const dur = getDuration();
-      if (dur > 0) {
-        setProgress(Math.min(100, (ct / dur) * 100));
-      }
-      animFrameRef.current = requestAnimationFrame(tick);
-    };
-
-    animFrameRef.current = requestAnimationFrame(tick);
+    if (isPlaying) {
+      animFrameRef.current = requestAnimationFrame(updateProgress);
+    } else if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
     return () => {
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-  }, [isPlaying, getDuration]);
+  }, [isPlaying, updateProgress]);
 
-  // ── PLAY / PAUSE ──
-  const handlePlayPause = useCallback(async () => {
+  // ── Handlers ──
+  const togglePlay = () => {
     const audio = audioRef.current;
-    console.log('[Audio] 🖱️ Play/Pause clicked. ready:', ready, 'isPlaying:', isPlaying, 'fixing:', isFixingRef.current, 'audio:', !!audio);
-
-    if (!audio) {
-      console.error('[Audio] No audio element!');
-      return;
-    }
-
-    if (isFixingRef.current) {
-      console.warn('[Audio] Still fixing duration, please wait...');
-      return;
-    }
+    if (!audio || !ready) return;
 
     if (isPlaying) {
       audio.pause();
-      setIsPlaying(false);
-      console.log('[Audio] ⏸ Paused');
     } else {
-      try {
-        // Ensure valid position
-        if (!isFinite(audio.currentTime) || audio.currentTime < 0) {
-          audio.currentTime = 0;
-        }
-        console.log('[Audio] ▶ Calling play(), readyState:', audio.readyState, 'currentTime:', audio.currentTime);
-        await audio.play();
-        setIsPlaying(true);
-        setError(null);
-        console.log('[Audio] ▶ Playing!');
-      } catch (err: any) {
-        console.error('[Audio] ▶ Play failed:', err.name, err.message);
-        setError(err.message);
-      }
+      audio.play().catch(err => console.error('[Audio] Play failed:', err));
     }
-  }, [isPlaying, ready]);
-
-  // ── SEEK ──
-  const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    const audio = audioRef.current;
-    if (!audio || isFixingRef.current) return;
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const dur = getDuration();
-
-    if (dur > 0) {
-      audio.currentTime = pct * dur;
-      setCurrentTime(pct * dur);
-      setProgress(pct * 100);
-    }
-  }, [getDuration]);
-
-  // ── Format ──
-  const fmt = (s: number) => {
-    const sec = Math.max(0, Math.round(s));
-    return `${Math.floor(sec / 60)}:${(sec % 60).toString().padStart(2, '0')}`;
+    setIsPlaying(!isPlaying);
   };
 
-  const timeLabel = isPlaying || currentTime > 0 ? fmt(currentTime) : fmt(totalDuration);
-  
-  // Default fallback waveform if none provided
-  const fallbackBars = [0.2, 0.4, 0.6, 0.8, 0.5, 0.7, 0.4, 0.3, 0.6, 0.9, 0.4, 0.5, 0.4, 0.2, 0.5, 0.8, 0.4, 0.6];
-  const activeWaveform = (waveform && waveform.length > 0) ? waveform : fallbackBars;
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !ready) return;
 
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const pct = Math.max(0, Math.min(1, x / rect.width));
+    const dur = getDuration();
+    
+    audio.currentTime = pct * dur;
+    setCurrentTime(audio.currentTime);
+    setProgress(pct * 100);
+  };
+
+  const formatTime = (time: number) => {
+    if (!isFinite(time)) return '0:00';
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  };
+
+  // ── UI UI UI ──
   return (
-    <div className={`flex items-center gap-3 px-4 py-2.5 rounded-2xl min-w-[220px] max-w-[300px] ${
-      isOwn ? 'bg-msg-outgoing rounded-tr-none' : 'bg-elevated rounded-tl-none'
+    <div className={`flex items-center gap-3 p-3 rounded-2xl min-w-[240px] shadow-sm transition-all ${
+      isOwn 
+        ? 'bg-msg-outgoing text-msg-outgoing-text' 
+        : 'bg-elevated text-text-primary'
     }`}>
-      {/* Play / Pause */}
-      <button
-        type="button"
-        onClick={handlePlayPause}
-        disabled={isFixingRef.current}
-        className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-          isOwn
-            ? 'bg-white/20 text-msg-outgoing-text hover:bg-white/30'
-            : 'bg-accent/10 text-accent hover:bg-accent/20'
-        } disabled:opacity-40`}
-        title={isPlaying ? 'Pause' : 'Play'}
+      {/* Play/Pause Button */}
+      <button 
+        onClick={togglePlay}
+        disabled={!ready || !!error}
+        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+          isOwn 
+            ? 'bg-white/20 hover:bg-white/30 text-white' 
+            : 'bg-accent/10 hover:bg-accent/20 text-accent'
+        } disabled:opacity-50`}
       >
         {isPlaying ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="4" width="4" height="16" rx="1" />
-            <rect x="14" y="4" width="4" height="16" rx="1" />
-          </svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
         ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <polygon points="6 3 20 12 6 21 6 3" />
-          </svg>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="ml-1"><path d="M8 5v14l11-7z"/></svg>
         )}
       </button>
 
-      {/* Waveform seekbar */}
-      <div className="flex-1 min-w-0">
-        <div
+      {/* Waveform & Info */}
+      <div className="flex-1 flex flex-col gap-1.5 min-w-0">
+        <div 
+          className="h-8 flex items-center gap-[2px] cursor-pointer group"
           onClick={handleSeek}
-          className="flex items-end gap-[2px] h-6 cursor-pointer"
         >
-          {activeWaveform.map((val, i) => {
-            const active = (i / activeWaveform.length) * 100 < progress;
-            // Height: val is 0-1, max height is 24px (h-6)
-            const h = Math.max(3, val * 24); 
+          {(waveform && waveform.length > 0 ? waveform : Array.from({length: 40}, () => 0.2 + Math.random() * 0.6)).map((h, i) => {
+            const barCount = (waveform && waveform.length > 0) ? waveform.length : 40;
+            const isFilled = (i / barCount) * 100 < progress;
+            
             return (
-              <div
+              <div 
                 key={i}
-                className="flex-1 rounded-sm transition-colors duration-100"
-                style={{
-                  height: `${h}px`,
-                  minWidth: '2px',
-                  backgroundColor: isOwn
-                    ? active ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.2)'
-                    : active ? 'var(--color-accent, #68d391)' : 'rgba(255,255,255,0.1)',
-                }}
+                className={`w-0.5 rounded-full transition-all ${
+                  isFilled
+                    ? (isOwn ? 'bg-white' : 'bg-accent')
+                    : (isOwn ? 'bg-white/30' : 'bg-white/10')
+                }`}
+                style={{ height: `${Math.max(15, h * 100)}%` }}
               />
             );
           })}
         </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className={`text-[10px] font-mono ${isOwn ? 'text-msg-outgoing-text/60' : 'text-text-hint'}`}>
-            {timeLabel}
+        
+        <div className="flex justify-between items-center px-0.5">
+          <span className="text-[10px] font-medium opacity-70">
+            {formatTime(currentTime)}
           </span>
-          {error && <span className="text-[9px] text-danger truncate ml-1">⚠ Error</span>}
+          <span className="text-[10px] font-medium opacity-70">
+            {formatTime(totalDuration)}
+          </span>
         </div>
       </div>
+
+      {/* Error state */}
+      {error && (
+        <div className="absolute -top-6 left-0 text-[10px] text-danger animate-pulse">
+          {error}
+        </div>
+      )}
     </div>
   );
 }

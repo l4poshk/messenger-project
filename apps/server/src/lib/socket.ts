@@ -94,6 +94,9 @@ export function initSocket(server: HttpServer) {
             fileUrl: data.fileUrl,
             duration: data.duration ? Math.round(data.duration) : undefined,
             waveform: data.waveform,
+            isRead: false,
+            isForwarded: data.isForwarded || false,
+            originalSenderName: data.originalSenderName || null,
           },
           include: {
             sender: { select: { id: true, username: true, avatar: true } }
@@ -105,12 +108,99 @@ export function initSocket(server: HttpServer) {
       }
     });
 
+    socket.on('message:read', async ({ chatId }: { chatId: string }) => {
+      try {
+        await prisma.message.updateMany({
+          where: {
+            chatId,
+            senderId: { not: userId },
+            isRead: false,
+          },
+          data: { isRead: true },
+        });
+
+        // Notify room that messages were read
+        io.to(`chat:${chatId}`).emit('messages:read', { chatId, readerId: userId });
+      } catch (err) {
+        logger.error('Failed to mark messages as read:', err);
+      }
+    });
+
+    socket.on('message:edit', async ({ messageId, content }: { messageId: string; content: string }) => {
+      try {
+        const message = await prisma.message.findUnique({ where: { id: messageId } });
+        if (!message || message.senderId !== userId) return;
+
+        const updated = await prisma.message.update({
+          where: { id: messageId },
+          data: { 
+            content, 
+            isEdited: true,
+            editedAt: new Date()
+          },
+          include: {
+            sender: { select: { id: true, username: true, avatar: true } }
+          }
+        });
+
+        io.to(`chat:${message.chatId}`).emit('message:update', updated);
+      } catch (err) {
+        logger.error('Failed to edit message:', err);
+      }
+    });
+
+    socket.on('message:delete', async ({ messageId, type }: { messageId: string; type: 'FOR_ME' | 'FOR_EVERYONE' }) => {
+      try {
+        const message = await prisma.message.findUnique({ where: { id: messageId } });
+        if (!message) return;
+
+        if (type === 'FOR_EVERYONE') {
+          // Only sender can delete for everyone
+          if (message.senderId !== userId) return;
+
+          // Soft delete: keep the record but clear content and mark as DELETED
+          const updated = await prisma.message.update({
+            where: { id: messageId },
+            data: {
+              content: 'Message deleted',
+              type: 'TEXT', // or add a DELETED type if preferred
+              fileUrl: null,
+              fileName: null,
+              fileSize: null,
+              duration: null,
+              waveform: [],
+            },
+            include: {
+              sender: { select: { id: true, username: true, avatar: true } }
+            }
+          });
+          io.to(`chat:${message.chatId}`).emit('message:update', updated);
+        } else {
+          // FOR_ME: add current user to hiddenFor array
+          const updated = await prisma.message.update({
+            where: { id: messageId },
+            data: {
+              hiddenFor: { push: userId }
+            }
+          });
+          // Notify only the user themselves
+          socket.emit('message:hide', { messageId });
+        }
+      } catch (err) {
+        logger.error('Failed to delete message:', err);
+      }
+    });
+
+    socket.on('chat:typing', ({ chatId, isTyping }: { chatId: string; isTyping: boolean }) => {
+      socket.to(`chat:${chatId}`).emit('chat:typing', { chatId, userId, username, isTyping });
+    });
+
     socket.on('typing:start', (chatId: string) => {
-      socket.to(`chat:${chatId}`).emit('typing:update', { chatId, userId, username, isTyping: true });
+      socket.to(`chat:${chatId}`).emit('chat:typing', { chatId, userId, username, isTyping: true });
     });
 
     socket.on('typing:stop', (chatId: string) => {
-      socket.to(`chat:${chatId}`).emit('typing:update', { chatId, userId, username, isTyping: false });
+      socket.to(`chat:${chatId}`).emit('chat:typing', { chatId, userId, username, isTyping: false });
     });
 
     // ── WebRTC Signaling (via Redis ZSET for Heartbeat) ──

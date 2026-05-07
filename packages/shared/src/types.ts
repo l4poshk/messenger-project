@@ -71,6 +71,11 @@ export interface Message {
   duration: number | null;
   waveform: number[] | null;
   replyToId: string | null;
+  isRead: boolean;
+  isEdited: boolean;
+  isForwarded: boolean;
+  originalSenderName: string | null;
+  hiddenFor: string[];
   createdAt: string;
   editedAt: string | null;
   sender?: User;
@@ -102,6 +107,7 @@ export interface TypingPayload {
   chatId: string;
   userId: string;
   username: string;
+  isTyping: boolean;
 }
 
 export interface CallOfferPayload {

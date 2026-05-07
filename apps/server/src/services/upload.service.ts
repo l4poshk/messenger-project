@@ -1,131 +1,122 @@
 // ──────────────────────────────────────────────
-// Upload service — image/audio processing + R2 storage
+// Upload service — image/video processing + Cloudinary storage
 // ──────────────────────────────────────────────
 
 import sharp from 'sharp';
 import crypto from 'crypto';
-import { uploadToR2 } from '../lib/r2';
+import { uploadToCloudinary } from '../lib/cloudinary';
 import { AppError } from '../middleware/errorHandler';
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
 const MAX_AUDIO_SIZE = 25 * 1024 * 1024; // 25 MB
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/mpeg', 'video/quicktime', 'video/webm'];
 const ALLOWED_AUDIO_TYPES = ['audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg', 'audio/wav'];
 
-interface ImageUploadResult {
+interface MediaUploadResult {
   url: string;
-  key: string;
-  width: number;
-  height: number;
+  publicId: string;
   size: number;
-}
-
-interface AudioUploadResult {
-  url: string;
-  key: string;
-  size: number;
-  duration: number | null;
-  mimeType: string;
+  width?: number;
+  height?: number;
+  duration?: number;
 }
 
 /**
- * Process and upload a chat image (max 1920px wide, WebP output).
+ * Process and upload a chat image.
  */
-export async function uploadChatImage(file: Express.Multer.File): Promise<ImageUploadResult> {
-  validateImageFile(file);
+export async function uploadChatImage(file: Express.Multer.File): Promise<MediaUploadResult> {
+  validateFile(file, ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE);
 
   const processed = await sharp(file.buffer)
     .resize(1920, 1920, { fit: 'inside', withoutEnlargement: true })
     .webp({ quality: 80 })
     .toBuffer({ resolveWithObject: true });
 
-  const key = `chat/${generateKey()}.webp`;
-  const url = await uploadToR2(key, processed.data, 'image/webp');
+  const { url, public_id } = await uploadToCloudinary(processed.data, 'chat/images', 'image');
 
   return {
     url,
-    key,
+    publicId: public_id,
+    size: processed.info.size,
     width: processed.info.width,
     height: processed.info.height,
-    size: processed.info.size,
   };
 }
 
 /**
- * Process and upload an avatar (256x256, WebP).
+ * Upload a chat video.
  */
-export async function uploadAvatar(file: Express.Multer.File): Promise<ImageUploadResult> {
-  validateImageFile(file);
+export async function uploadChatVideo(file: Express.Multer.File): Promise<MediaUploadResult> {
+  validateFile(file, ALLOWED_VIDEO_TYPES, MAX_VIDEO_SIZE);
+
+  const { url, public_id, duration } = await uploadToCloudinary(file.buffer, 'chat/videos', 'video');
+
+  return {
+    url,
+    publicId: public_id,
+    size: file.size,
+    duration,
+  };
+}
+
+/**
+ * Process and upload an avatar.
+ */
+export async function uploadAvatar(file: Express.Multer.File): Promise<MediaUploadResult> {
+  validateFile(file, ALLOWED_IMAGE_TYPES, MAX_IMAGE_SIZE);
 
   const processed = await sharp(file.buffer)
     .resize(256, 256, { fit: 'cover' })
     .webp({ quality: 85 })
     .toBuffer({ resolveWithObject: true });
 
-  const key = `avatars/${generateKey()}.webp`;
-  const url = await uploadToR2(key, processed.data, 'image/webp');
+  const { url, public_id } = await uploadToCloudinary(processed.data, 'avatars', 'image');
 
   return {
     url,
-    key,
+    publicId: public_id,
+    size: processed.info.size,
     width: processed.info.width,
     height: processed.info.height,
-    size: processed.info.size,
   };
 }
 
 /**
- * Upload an audio file (voice message). No re-encoding — browser already
- * encodes via MediaRecorder (webm/ogg). Duration is passed from client.
+ * Upload an audio file (voice message).
  */
 export async function uploadAudio(
   file: Express.Multer.File,
   duration?: number
-): Promise<AudioUploadResult> {
-  validateAudioFile(file);
+): Promise<MediaUploadResult> {
+  validateFile(file, ALLOWED_AUDIO_TYPES, MAX_AUDIO_SIZE);
 
-  // Determine extension from mimetype
-  const extMap: Record<string, string> = {
-    'audio/webm': 'webm',
-    'audio/ogg': 'ogg',
-    'audio/mp4': 'm4a',
-    'audio/mpeg': 'mp3',
-    'audio/wav': 'wav',
-  };
-  const ext = extMap[file.mimetype] || 'webm';
-  const key = `voice/${generateKey()}.${ext}`;
-  const url = await uploadToR2(key, file.buffer, file.mimetype);
+  const { url, public_id, duration: detectedDuration } = await uploadToCloudinary(
+    file.buffer, 
+    'chat/audio', 
+    'video' // Cloudinary treats audio as video resource type
+  );
 
   return {
     url,
-    key,
+    publicId: public_id,
     size: file.size,
-    duration: duration ?? null,
-    mimeType: file.mimetype,
+    duration: duration ?? detectedDuration,
   };
 }
 
 // ── Validators ──
 
-function validateImageFile(file: Express.Multer.File) {
-  if (!ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-    throw new AppError(400, `Unsupported image type: ${file.mimetype}. Allowed: ${ALLOWED_IMAGE_TYPES.join(', ')}`);
+function validateFile(file: Express.Multer.File, allowedTypes: string[], maxSize: number) {
+  if (!allowedTypes.includes(file.mimetype)) {
+    throw new AppError(400, `Unsupported file type: ${file.mimetype}. Allowed: ${allowedTypes.join(', ')}`);
   }
-  if (file.size > MAX_IMAGE_SIZE) {
-    throw new AppError(400, `Image too large. Max: ${MAX_IMAGE_SIZE / 1024 / 1024}MB`);
-  }
-}
-
-function validateAudioFile(file: Express.Multer.File) {
-  if (!ALLOWED_AUDIO_TYPES.includes(file.mimetype)) {
-    throw new AppError(400, `Unsupported audio type: ${file.mimetype}. Allowed: ${ALLOWED_AUDIO_TYPES.join(', ')}`);
-  }
-  if (file.size > MAX_AUDIO_SIZE) {
-    throw new AppError(400, `Audio too large. Max: ${MAX_AUDIO_SIZE / 1024 / 1024}MB`);
+  if (file.size > maxSize) {
+    throw new AppError(400, `File too large. Max: ${maxSize / 1024 / 1024}MB`);
   }
 }
 
 function generateKey(): string {
   return `${Date.now()}-${crypto.randomBytes(8).toString('hex')}`;
 }
-

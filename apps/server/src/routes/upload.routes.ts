@@ -14,10 +14,24 @@ import { getIO } from '../lib/socket';
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 },
+  limits: { fileSize: 50 * 1024 * 1024 }, // Increase to 50MB for video
 });
 
 export const uploadRouter = Router();
+
+// POST /api/upload/video
+uploadRouter.post('/video', upload.single('file'), async (req, res, next) => {
+  try {
+    if (!req.file) {
+      res.status(400).json({ data: null, error: 'No file provided' });
+      return;
+    }
+    const result = await uploadService.uploadChatVideo(req.file);
+    res.json({ data: result, error: null });
+  } catch (err) {
+    next(err);
+  }
+});
 
 // ══════════════════════════════════════════════
 // PUBLIC: Media streaming proxy (no auth)

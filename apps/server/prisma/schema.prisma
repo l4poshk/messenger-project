@@ -104,6 +104,11 @@ model Message {
   duration  Int?        // audio/video duration in seconds
   waveform  Float[]     // array of 0-1 values for audio visualization
   replyToId String?
+  isRead    Boolean     @default(false)
+  isEdited  Boolean     @default(false)
+  isForwarded Boolean   @default(false)
+  originalSenderName String?
+  hiddenFor String[]    @default([]) // User IDs who deleted this for themselves
   createdAt DateTime    @default(now())
   editedAt  DateTime?
 

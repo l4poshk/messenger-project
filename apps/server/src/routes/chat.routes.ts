@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/requireAuth';
 import { createChatSchema, createTopicSchema } from '@messenger/shared';
 import * as chatService from '../services/chat.service';
 import { getIO } from '../lib/socket';
+import { prisma } from '../lib/prisma';
 
 export const chatRouter = Router();
 chatRouter.use(requireAuth);
@@ -115,6 +116,60 @@ chatRouter.patch('/:id', async (req, res, next) => {
     getIO().to(`chat:${chat.id}`).emit('chat:update', chat);
 
     res.json({ data: chat, error: null });
+  } catch (err) { next(err); }
+});
+
+import multer from 'multer';
+import * as uploadService from '../services/upload.service';
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+});
+
+// POST /api/chats/:id/messages — отправить сообщение (поддерживает файлы)
+chatRouter.post('/:id/messages', upload.single('file'), async (req, res, next) => {
+  try {
+    const chatId = req.params.id as string;
+    const content = req.body.content as string | undefined;
+    const type = req.body.type as string | undefined;
+    const topicId = req.body.topicId as string | undefined;
+
+    let fileUrl: string | undefined;
+    let messageType = (type as any) || 'TEXT';
+
+    if (req.file) {
+      if (messageType === 'IMAGE') {
+        const result = await uploadService.uploadChatImage(req.file);
+        fileUrl = result.url;
+      } else if (messageType === 'VIDEO') {
+        const result = await uploadService.uploadChatVideo(req.file);
+        fileUrl = result.url;
+      } else if (messageType === 'AUDIO') {
+        const result = await uploadService.uploadAudio(req.file);
+        fileUrl = result.url;
+      }
+    }
+
+    const message = await prisma.message.create({
+      data: {
+        chatId,
+        senderId: req.user!.userId,
+        content: content || '',
+        type: messageType,
+        topicId: topicId || null,
+        fileUrl,
+        isForwarded: req.body.isForwarded === 'true' || req.body.isForwarded === true || false,
+        originalSenderName: req.body.originalSenderName || null,
+      },
+      include: {
+        sender: { select: { id: true, username: true, avatar: true } }
+      }
+    });
+
+    getIO().to(`chat:${chatId}`).emit('message:new', message);
+
+    res.status(201).json({ data: message, error: null });
   } catch (err) { next(err); }
 });
 
