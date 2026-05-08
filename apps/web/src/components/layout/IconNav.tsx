@@ -87,14 +87,18 @@ export default function IconNav() {
         id="nav-user"
         onClick={() => setActivePanel('settings')}
         className={`w-9 h-9 rounded-full flex items-center justify-center
-                   text-xs font-bold uppercase mt-2 transition-colors ${
+                   text-xs font-bold uppercase mt-2 transition-colors overflow-hidden ${
           activePanel === 'settings'
             ? 'bg-accent text-accent-dark ring-2 ring-accent/30'
             : 'bg-accent/20 text-accent hover:bg-accent/30'
         }`}
         title="Profile & Settings"
       >
-        {user?.username?.charAt(0) || '?'}
+        {user?.avatar ? (
+          <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+        ) : (
+          user?.username?.charAt(0) || '?'
+        )}
       </button>
     </nav>
   );

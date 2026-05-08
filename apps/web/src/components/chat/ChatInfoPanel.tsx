@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
+import { useContactStore } from '@/store/contactStore';
 import { api } from '@/lib/api';
 import type { Chat } from '@messenger/shared';
 
@@ -20,6 +21,11 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   const [editDescription, setEditDescription] = useState((chat as any).description || '');
   const [saving, setSaving] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [isAddingMember, setIsAddingMember] = useState(false);
+  const [searchContact, setSearchContact] = useState('');
+  
+  const contacts = useContactStore((s) => s.contacts);
+  const fetchContacts = useContactStore((s) => s.fetchContacts);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const getChatName = () => {
@@ -43,9 +49,8 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
     try {
       const res = await api.delete(`/chats/${chat.id}/members/${currentUserId}`);
       if (res.data) {
-        // Remove chat from store or just close panel and let Sidebar handle it
         onClose();
-        window.location.reload(); // Simple way to refresh chat list
+        window.location.reload();
       }
     } catch (err) {
       console.error('[ChatInfo] Failed to leave:', err);
@@ -57,7 +62,6 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
     try {
       const res = await api.delete(`/chats/${chat.id}/members/${targetUserId}`);
       if (res.data) {
-        // Update local chat object
         const updatedChat = {
           ...chat,
           members: (chat as any).members.filter((m: any) => m.userId !== targetUserId),
@@ -73,7 +77,6 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
     try {
       const res = await api.patch(`/chats/${chat.id}/members/${targetUserId}/promote`);
       if (res.data) {
-        // Updated by socket:update normally, but we can update locally for speed
         const updatedChat = {
           ...chat,
           members: (chat as any).members.map((m: any) =>
@@ -149,133 +152,231 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
     }
   };
 
+  const handleAddMember = async (targetUserId: string) => {
+    try {
+      const res = await api.post(`/chats/${chat.id}/members`, { userId: targetUserId });
+      if (res.data) {
+        const updatedChat = {
+          ...chat,
+          members: [...(chat as any).members, res.data],
+        };
+        updateChat(updatedChat as any);
+        setIsAddingMember(false);
+      }
+    } catch (err) {
+      console.error('[ChatInfo] Add member failed:', err);
+    }
+  };
+
   const myRole = (chat as any).members?.find((m: any) => m.userId === currentUserId)?.role;
   const canModerate = myRole === 'CREATOR' || myRole === 'ADMIN';
+
+  // Filter contacts not already in chat
+  const availableContacts = contacts.filter(c => 
+    !(chat as any).members?.some((m: any) => m.userId === c.id) &&
+    c.username.toLowerCase().includes(searchContact.toLowerCase())
+  );
 
   return (
     <div className="absolute top-0 right-0 w-80 h-full bg-secondary border-l border-border shadow-2xl flex flex-col z-50 animate-slide-right">
       {/* Header */}
       <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-primary/50">
-        <h3 className="font-semibold text-text-primary text-sm">Chat Info</h3>
-        <button
-          onClick={onClose}
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:bg-elevated hover:text-text-primary transition-colors"
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
+        <h3 className="font-semibold text-text-primary text-sm">
+          {isAddingMember ? 'Add Members' : 'Chat Info'}
+        </h3>
+        <div className="flex items-center gap-1">
+          {isAddingMember && (
+            <button
+              onClick={() => setIsAddingMember(false)}
+              className="p-2 text-text-hint hover:text-text-primary transition-colors"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-text-muted hover:bg-elevated hover:text-text-primary transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar py-6">
-        {/* Chat Overview */}
-        <div className="flex flex-col items-center px-6 mb-8 text-center relative group/overview">
-          {canModerate && chat.type !== 'DIRECT' && (
-            <button
-              onClick={() => {
-                if (isEditing) handleSaveMeta();
-                else setIsEditing(true);
-              }}
-              disabled={saving}
-              className="absolute top-0 right-6 p-2 rounded-lg bg-elevated text-text-hint hover:text-accent transition-colors"
-            >
-              {saving ? (
-                <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-              ) : isEditing ? (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
-                </svg>
-              )}
-            </button>
-          )}
-
-          <div
-            onClick={handleAvatarClick}
-            className={`w-24 h-24 rounded-3xl bg-accent/10 flex items-center justify-center text-accent text-3xl font-bold uppercase mb-4 shadow-sm overflow-hidden relative ${canModerate && isEditing ? 'cursor-pointer hover:opacity-80' : ''
-              }`}
-          >
-            {uploadingAvatar && (
-              <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
-                <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              </div>
-            )}
-            {getChatAvatar() ? (
-              <img src={getChatAvatar()} alt={getChatName()} className="w-full h-full object-cover" />
-            ) : (
-              getChatName().charAt(0)
-            )}
-            {canModerate && isEditing && (
-              <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                Change
-              </div>
-            )}
-          </div>
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            accept="image/*"
-            className="hidden"
-          />
-
-          {isEditing ? (
-            <div className="w-full space-y-2">
+        {isAddingMember ? (
+          <div className="px-4 space-y-4">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-text-hint" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
               <input
                 type="text"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
-                className="w-full px-3 py-2 bg-elevated rounded-lg text-sm text-center font-semibold text-text-primary outline-none focus:ring-1 focus:ring-accent"
-                placeholder="Chat Name"
+                placeholder="Search contacts..."
+                value={searchContact}
+                onChange={(e) => setSearchContact(e.target.value)}
+                className="w-full rounded-lg bg-elevated border-0 pl-9 pr-3 py-2 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30"
               />
-              <textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                className="w-full px-3 py-2 bg-elevated rounded-lg text-xs text-center text-text-muted outline-none focus:ring-1 focus:ring-accent resize-none min-h-[60px]"
-                placeholder="Description (optional)"
-              />
-              <div className="flex gap-2">
+            </div>
+
+            <div className="space-y-1">
+              {availableContacts.length === 0 ? (
+                <p className="text-center py-10 text-xs text-text-hint">No contacts available to add</p>
+              ) : (
+                availableContacts.map(contact => (
+                  <button
+                    key={contact.id}
+                    onClick={() => handleAddMember(contact.id)}
+                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors text-left"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold uppercase overflow-hidden">
+                      {contact.avatar ? (
+                        <img src={contact.avatar} alt={contact.username} className="w-full h-full object-cover" />
+                      ) : (
+                        contact.username.charAt(0)
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-text-primary truncate text-sm">{contact.username}</p>
+                      <p className="text-[10px] text-text-hint truncate">{contact.email}</p>
+                    </div>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-accent">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Chat Overview */}
+            <div className="flex flex-col items-center px-6 mb-8 text-center relative group/overview">
+              {canModerate && chat.type !== 'DIRECT' && (
                 <button
                   onClick={() => {
-                    setIsEditing(false);
-                    setEditName(chat.name || '');
-                    setEditDescription((chat as any).description || '');
+                    if (isEditing) handleSaveMeta();
+                    else setIsEditing(true);
                   }}
-                  className="flex-1 py-1.5 rounded-lg bg-elevated text-text-muted text-[11px] font-medium hover:text-text-primary transition-colors"
+                  disabled={saving}
+                  className="absolute top-0 right-6 p-2 rounded-lg bg-elevated text-text-hint hover:text-accent transition-colors"
                 >
-                  Cancel
+                  {saving ? (
+                    <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  ) : isEditing ? (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  ) : (
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+                    </svg>
+                  )}
                 </button>
-                <button
-                  onClick={handleSaveMeta}
-                  disabled={saving || !editName.trim()}
-                  className="flex-1 py-1.5 rounded-lg bg-accent text-accent-dark text-[11px] font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <h4 className="text-lg font-semibold text-text-primary">{getChatName()}</h4>
-              <p className="text-xs text-text-muted mt-1 px-4 leading-relaxed line-clamp-3">
-                {(chat as any).description || (chat.type === 'DIRECT' ? 'Direct Message' : 'No description')}
-              </p>
-              <p className="text-[10px] text-text-hint mt-2 uppercase tracking-widest font-bold opacity-50">
-                {chat.type === 'DIRECT' ? '' : `${(chat as any).members?.length || 0} members`}
-              </p>
-            </>
-          )}
-        </div>
+              )}
 
-        {/* Participants List */}
-        <div className="space-y-1">
-          <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider px-6 pb-2">
-            Participants
-          </p>
-          <div className="px-2">
+              <div
+                onClick={handleAvatarClick}
+                className={`w-24 h-24 rounded-3xl bg-accent/10 flex items-center justify-center text-accent text-3xl font-bold uppercase mb-4 shadow-sm overflow-hidden relative ${canModerate && isEditing ? 'cursor-pointer hover:opacity-80' : ''
+                  }`}
+              >
+                {uploadingAvatar && (
+                  <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-10">
+                    <div className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  </div>
+                )}
+                {getChatAvatar() ? (
+                  <img src={getChatAvatar()} alt={getChatName()} className="w-full h-full object-cover" />
+                ) : (
+                  getChatName().charAt(0)
+                )}
+                {canModerate && isEditing && (
+                  <div className="absolute bottom-0 inset-x-0 bg-black/50 text-white text-[10px] py-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    Change
+                  </div>
+                )}
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                accept="image/*"
+                className="hidden"
+              />
+
+              {isEditing ? (
+                <div className="w-full space-y-2">
+                  <input
+                    type="text"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    className="w-full px-3 py-2 bg-elevated rounded-lg text-sm text-center font-semibold text-text-primary outline-none focus:ring-1 focus:ring-accent"
+                    placeholder="Chat Name"
+                  />
+                  <textarea
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    className="w-full px-3 py-2 bg-elevated rounded-lg text-xs text-center text-text-muted outline-none focus:ring-1 focus:ring-accent resize-none min-h-[60px]"
+                    placeholder="Description (optional)"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setIsEditing(false);
+                        setEditName(chat.name || '');
+                        setEditDescription((chat as any).description || '');
+                      }}
+                      className="flex-1 py-1.5 rounded-lg bg-elevated text-text-muted text-[11px] font-medium hover:text-text-primary transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={handleSaveMeta}
+                      disabled={saving || !editName.trim()}
+                      className="flex-1 py-1.5 rounded-lg bg-accent text-accent-dark text-[11px] font-medium hover:bg-accent-hover transition-colors disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <h4 className="text-lg font-semibold text-text-primary">{getChatName()}</h4>
+                  <p className="text-xs text-text-muted mt-1 px-4 leading-relaxed line-clamp-3">
+                    {(chat as any).description || (chat.type === 'DIRECT' ? 'Direct Message' : 'No description')}
+                  </p>
+                  <p className="text-[10px] text-text-hint mt-2 uppercase tracking-widest font-bold opacity-50">
+                    {chat.type === 'DIRECT' ? '' : `${(chat as any).members?.length || 0} members`}
+                  </p>
+                </>
+              )}
+            </div>
+
+            {/* Participants List */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between px-6 pb-2">
+                <p className="text-[11px] text-text-hint uppercase font-semibold tracking-wider">
+                  Participants
+                </p>
+                {canModerate && chat.type !== 'DIRECT' && (
+                  <button
+                    onClick={() => {
+                      fetchContacts();
+                      setIsAddingMember(true);
+                    }}
+                    className="text-[10px] font-bold text-accent hover:underline flex items-center gap-1"
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+                    </svg>
+                    ADD
+                  </button>
+                )}
+              </div>
+              <div className="px-2">
             {(chat as any).members?.map((member: any) => {
               const u = member.user;
               const isOnline = u.status === 'ONLINE' || (u.lastSeen && Date.now() - new Date(u.lastSeen).getTime() < 5 * 60 * 1000);
@@ -292,8 +393,7 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
                       )}
                     </div>
                     {!isMe && (
-                      <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary ${isOnline ? 'bg-accent' : 'bg-text-hint'
-                        }`} />
+                      <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary ${isOnline ? 'bg-accent' : 'bg-text-hint'}`} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
@@ -355,11 +455,13 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
                 </div>
               );
             })}
+            </div>
           </div>
-        </div>
-      </div>
+        </>
+      )}
+    </div>
 
-      {/* Footer Actions */}
+    {/* Footer Actions */}
       <div className="px-4 py-4 border-t border-border">
         <button
           onClick={handleLeaveChat}

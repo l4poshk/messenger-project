@@ -5,7 +5,7 @@
 // Notifications, and Settings panels
 // ──────────────────────────────────────────────
 
-import { useEffect, useCallback, useState, useRef } from 'react';
+import { useEffect, useCallback, useState, useRef, useMemo } from 'react';
 import { useAuthStore } from '@/store/authStore';
 import { useChatStore } from '@/store/chatStore';
 import { useUiStore } from '@/store/uiStore';
@@ -63,6 +63,15 @@ export default function Sidebar() {
     settings: 'Settings',
   };
 
+  // ── Sort chats by last activity ──
+  const sortedChatList = useMemo(() => {
+    return [...chats].sort((a: any, b: any) => {
+      const aTime = new Date(a.messages?.[0]?.createdAt || a.createdAt).getTime();
+      const bTime = new Date(b.messages?.[0]?.createdAt || b.createdAt).getTime();
+      return bTime - aTime;
+    });
+  }, [chats]);
+
   return (
     <aside className="flex flex-col w-sidebar bg-secondary border-r border-border shrink-0">
       {/* ── Header ── */}
@@ -97,7 +106,7 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {activePanel === 'chats' && (
           <ChatListPanel
-            chats={chats}
+            chats={sortedChatList}
             activeChatId={activeChatId}
             setActiveChat={setActiveChat}
             getChatName={getChatName}
@@ -112,9 +121,17 @@ export default function Sidebar() {
       {/* ── Footer user info ── */}
       <div className="px-3 py-3 border-t border-border shrink-0">
         <div className="flex items-center gap-3">
-          <div className="relative">
-            <div className="w-9 h-9 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs font-bold uppercase">
-              {user?.username?.charAt(0)}
+          <div className="relative shrink-0">
+            <div className="w-9 h-9 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs font-bold uppercase overflow-hidden">
+              {user?.avatar ? (
+                <img 
+                  src={user.avatar} 
+                  alt={user.username} 
+                  className="w-full h-full object-cover" 
+                />
+              ) : (
+                user?.username?.charAt(0)
+              )}
             </div>
             <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-accent border-2 border-secondary" />
           </div>
@@ -139,6 +156,7 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getCha
   getChatName: (chat: any) => string;
   getChatAvatar: (chat: any) => string | null;
 }) {
+  const userId = useAuthStore((s) => s.user?.id);
   if (chats.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-hint text-sm opacity-50">
@@ -158,13 +176,29 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getCha
           }`}
         >
           <div className="relative shrink-0">
-            <div className="w-11 h-11 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold overflow-hidden">
+            <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold uppercase overflow-hidden border border-white/5">
               {getChatAvatar(chat) ? (
-                <img src={getChatAvatar(chat)!} alt={getChatName(chat)} className="w-full h-full object-cover" />
+                <img src={getChatAvatar(chat)!} alt="" className="w-full h-full object-cover" />
               ) : (
-                getChatName(chat).charAt(0).toUpperCase()
+                getChatName(chat).charAt(0)
               )}
             </div>
+            
+            {/* Online Status Dot (for DIRECT chats) */}
+            {(() => {
+              if (chat.type !== 'DIRECT') return null;
+              const other = chat.members?.find((m: any) => m.userId !== userId)?.user;
+              if (!other) return null;
+              
+              const isOnline = other.status === 'ONLINE' || 
+                (other.lastSeen && Date.now() - new Date(other.lastSeen).getTime() < 5 * 60 * 1000);
+              
+              if (!isOnline) return null;
+              
+              return (
+                <span className="absolute bottom-0 right-0 w-3 h-3 bg-accent border-2 border-primary rounded-full" />
+              );
+            })()}
           </div>
           <div className="flex-1 min-w-0 text-left">
             <div className="flex items-center justify-between">
@@ -175,9 +209,16 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getCha
                 </span>
               )}
             </div>
-            <p className="text-xs text-text-muted truncate">
-              {chat.messages?.[0]?.content || 'No messages yet'}
-            </p>
+            <div className="flex items-center justify-between gap-2 mt-0.5">
+              <p className="text-xs text-text-muted truncate flex-1">
+                {chat.messages?.[0]?.content || 'No messages yet'}
+              </p>
+              {chat.unreadCount > 0 && (
+                <span className="min-w-[18px] h-[18px] flex items-center justify-center bg-accent text-accent-dark text-[10px] font-bold rounded-full px-1 animate-in zoom-in-50 duration-200">
+                  {chat.unreadCount > 99 ? '99+' : chat.unreadCount}
+                </span>
+              )}
+            </div>
           </div>
         </button>
       ))}

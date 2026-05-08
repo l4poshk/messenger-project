@@ -103,6 +103,30 @@ export function initSocket(server: HttpServer) {
           }
         });
         io.to(`chat:${data.chatId}`).emit('message:new', message);
+
+        // ── Notify all members individually (so unread counts update even if not in chat room) ──
+        const members = await prisma.member.findMany({
+          where: { chatId: data.chatId },
+          select: { userId: true }
+        });
+        
+        members.forEach(m => {
+          // We already emitted to the chat room, but users might not be joined if chat is inactive
+          if (m.userId !== userId) {
+            io.to(`user:${m.userId}`).emit('message:new', message);
+          }
+        });
+
+        // ── Create Notifications ──
+        import('../services/notification.service').then(({ notifyChatMembers }) => {
+          notifyChatMembers({
+            chatId: data.chatId,
+            senderId: userId,
+            type: 'message',
+            title: username,
+            body: data.type === 'TEXT' ? data.content : `Sent a ${data.type.toLowerCase()}`,
+          });
+        });
       } catch (err) {
         logger.error('Failed to save message:', err);
       }
@@ -121,6 +145,17 @@ export function initSocket(server: HttpServer) {
 
         // Notify room that messages were read
         io.to(`chat:${chatId}`).emit('messages:read', { chatId, readerId: userId });
+
+        // Notify each member individually (for cross-device sync)
+        const members = await prisma.member.findMany({
+          where: { chatId },
+          select: { userId: true }
+        });
+        members.forEach(m => {
+          if (m.userId !== userId) {
+            io.to(`user:${m.userId}`).emit('messages:read', { chatId, readerId: userId });
+          }
+        });
       } catch (err) {
         logger.error('Failed to mark messages as read:', err);
       }
@@ -291,6 +326,17 @@ export function initSocket(server: HttpServer) {
             callerId: userId,
             callerName: username,
             type: p.type
+          });
+
+          // ── Create Notification record ──
+          import('../services/notification.service').then(({ createNotification }) => {
+            createNotification({
+              userId: m.userId,
+              chatId: p.chatId,
+              type: 'call',
+              title: `Incoming ${p.type} call`,
+              body: `${username} is calling you`,
+            });
           });
         }
       });

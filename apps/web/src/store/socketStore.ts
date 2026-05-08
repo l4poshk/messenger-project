@@ -4,6 +4,7 @@ import { useAuthStore } from './authStore';
 import { useMessageStore } from './messageStore';
 import { useChatStore } from './chatStore';
 import { useNotificationStore } from './notificationStore';
+import { useUiStore } from './uiStore';
 import { useCallStore } from './callStore';
 
 interface SocketState {
@@ -95,13 +96,24 @@ export const useSocketStore = create<SocketState>((set, get) => ({
 
     // ── Слушаем новые сообщения ──
     socket.on('message:new', (message) => {
+      // ── Prevent duplicates (since we now emit to both chat room and user room) ──
+      const chatMsgs = useMessageStore.getState().messages[message.chatId] || [];
+      if (chatMsgs.some(m => m.id === message.id)) return;
+
       console.log('[Socket] 📩 message:new', message.id);
       useMessageStore.getState().addMessage(message);
 
-      const { chats, updateChat } = useChatStore.getState();
+      const { chats, updateChat, activeChatId, incrementUnread } = useChatStore.getState();
       const chat = chats.find((c) => c.id === message.chatId);
       if (chat) {
+        // Update the last message in the sidebar
         updateChat({ ...chat, messages: [message] } as any);
+        
+        // Increment unread if not active chat and not from current user
+        const userId = useAuthStore.getState().user?.id;
+        if (message.chatId !== activeChatId && message.senderId !== userId) {
+          incrementUnread(message.chatId);
+        }
       }
     });
 
@@ -122,6 +134,12 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     socket.on('messages:read', (data: { chatId: string; readerId: string }) => {
       console.log('[Socket] ✅ messages:read', data.chatId);
       useMessageStore.getState().markAsRead(data.chatId);
+      
+      // If we are the reader, reset unread count
+      const userId = useAuthStore.getState().user?.id;
+      if (data.readerId === userId) {
+        useChatStore.getState().resetUnread(data.chatId);
+      }
     });
 
     socket.on('message:update', (message) => {
@@ -150,7 +168,31 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     socket.on('notification:new', (notification) => {
       console.log('[Socket] 🔔 notification:new', notification.id);
       useNotificationStore.getState().addNotification(notification);
+
+      // ── Browser Notification ──
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'granted') {
+          const n = new Notification(notification.title, {
+            body: notification.body,
+            icon: '/logo.png',
+          });
+          n.onclick = () => {
+            window.focus();
+            if (notification.chatId) {
+              useChatStore.getState().setActiveChat(notification.chatId);
+              useUiStore.getState().setActivePanel('chats');
+            }
+          };
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission();
+        }
+      }
     });
+
+    // Request notification permission initially
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+      Notification.requestPermission();
+    }
 
     // ── Слушаем статус пользователя ──
     socket.on('user:status', (data: { userId: string; status: string; lastSeen: string }) => {

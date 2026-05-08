@@ -9,7 +9,7 @@ import type { ChatType, MemberRole } from '@prisma/client';
 // ── Получить все чаты пользователя ──
 
 export async function getUserChats(userId: string) {
-  return await prisma.chat.findMany({
+  const chats = await prisma.chat.findMany({
     where: {
       members: { some: { userId } }
     },
@@ -34,6 +34,18 @@ export async function getUserChats(userId: string) {
     },
     orderBy: { createdAt: 'desc' }
   });
+
+  // Calculate unreadCount for each chat efficiently
+  return await Promise.all(chats.map(async (chat) => {
+    const unreadCount = await prisma.message.count({
+      where: {
+        chatId: chat.id,
+        senderId: { not: userId },
+        isRead: false
+      }
+    });
+    return { ...chat, unreadCount };
+  }));
 }
 
 // ── Создать чат (DIRECT / GROUP / SUPERGROUP) ──

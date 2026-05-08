@@ -325,14 +325,24 @@ export default function ChatArea() {
 
   if (!activeChatId) {
     return (
-      <main className="flex-1 flex flex-col items-center justify-center text-text-hint bg-primary">
-        <div className="w-20 h-20 rounded-3xl bg-accent/5 flex items-center justify-center mb-4 text-accent/40">
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-.3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z" />
-          </svg>
+      <main className="flex-1 flex flex-col items-center justify-center bg-primary p-8 text-center overflow-hidden">
+        <div className="relative w-48 h-48 flex items-center justify-center mb-6">
+          {/* Forced Center Glow */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-accent/20 blur-[70px] rounded-full pointer-events-none" />
+          
+          <div className="relative w-28 h-28 rounded-[2.8rem] bg-elevated border border-white/10 flex items-center justify-center shadow-[0_0_50px_rgba(0,0,0,0.3)]">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="text-accent drop-shadow-[0_0_8px_rgba(var(--accent-rgb),0.5)]">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </div>
         </div>
-        <h2 className="text-lg font-medium text-text-muted mb-1">Select a chat</h2>
-        <p className="text-sm text-text-hint">Choose a conversation or start a new one</p>
+
+        <div className="relative z-10">
+          <h2 className="text-3xl font-black text-text-primary mb-3 tracking-tight">Welcome back!</h2>
+          <p className="text-base text-text-muted max-w-[300px] leading-relaxed opacity-70 mx-auto">
+            Select a conversation from the sidebar to start messaging your friends.
+          </p>
+        </div>
       </main>
     );
   }
