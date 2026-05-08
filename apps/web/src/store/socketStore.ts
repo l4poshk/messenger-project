@@ -22,7 +22,17 @@ export const useSocketStore = create<SocketState>((set, get) => ({
   connect: () => {
     const { accessToken } = useAuthStore.getState();
     if (!accessToken) {
-      console.warn('[Socket] No access token, skipping connect');
+      console.warn('[Socket] No access token, attempting refresh...');
+      // Try to refresh token before giving up
+      import('@/lib/api').then(async ({ tryRefresh }) => {
+        const refreshed = await tryRefresh();
+        if (refreshed) {
+          console.log('[Socket] Refresh successful, retrying connect');
+          get().connect();
+        } else {
+          console.warn('[Socket] Refresh failed, skipping connect');
+        }
+      });
       return;
     }
 
@@ -58,6 +68,24 @@ export const useSocketStore = create<SocketState>((set, get) => ({
 
     socket.on('connect_error', (err) => {
       console.error('[Socket] ❌ Connection error:', err.message);
+      
+      // If auth error, try to refresh token
+      if (err.message.includes('Authentication error')) {
+        console.warn('[Socket] Auth error, attempting refresh...');
+        import('@/lib/api').then(async ({ tryRefresh }) => {
+          const refreshed = await tryRefresh();
+          if (refreshed) {
+            console.log('[Socket] Refresh successful, socket will retry with new token');
+            // Update the token in the socket auth object for the next attempt
+            const newToken = useAuthStore.getState().accessToken;
+            if (newToken) {
+              socket.auth = { token: newToken };
+              // socket.io handles reconnection automatically, but we can nudge it
+              socket.connect();
+            }
+          }
+        });
+      }
     });
 
     socket.on('disconnect', (reason) => {
