@@ -120,6 +120,8 @@ contactRouter.delete('/:contactId', async (req, res, next) => {
 
     if (directChat) {
       // Deleting the chat will cascade delete members and messages (based on schema)
+      // Also manually delete notifications for this chat
+      await prisma.notification.deleteMany({ where: { chatId: directChat.id } });
       await prisma.chat.delete({ where: { id: directChat.id } });
 
       // 3. Notify both users via Socket to remove the chat from their lists

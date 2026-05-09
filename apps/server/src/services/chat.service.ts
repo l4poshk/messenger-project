@@ -207,6 +207,8 @@ export async function removeMember(chatId: string, userId: string, targetUserId:
     // Если Создатель хочет выйти — мы просто удаляем весь чат целиком
     if (requester.role === 'CREATOR') {
       console.log(`[ChatService] 🗑️ Creator is leaving, deleting entire chat: ${chatId} (Type: ${chat?.type})`);
+      // Сначала удаляем уведомления этого чата
+      await prisma.notification.deleteMany({ where: { chatId } });
       await prisma.chat.delete({ where: { id: chatId } });
       return { removed: true, chatDeleted: true };
     }
@@ -214,6 +216,8 @@ export async function removeMember(chatId: string, userId: string, targetUserId:
     // Если обычный участник выходит из личного чата — тоже удаляем (так как DIRECT это только 2 человека)
     if (chat?.type === 'DIRECT') {
       console.log(`[ChatService] 🗑️ Member left DIRECT chat, deleting it: ${chatId}`);
+      // Сначала удаляем уведомления этого чата
+      await prisma.notification.deleteMany({ where: { chatId } });
       await prisma.chat.delete({ where: { id: chatId } });
       return { removed: true, chatDeleted: true };
     }

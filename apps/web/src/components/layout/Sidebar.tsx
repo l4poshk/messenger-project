@@ -446,14 +446,27 @@ function NotificationsPanel() {
   const handleClick = (n: import('@/store/notificationStore').Notification) => {
     // 1) Navigate to chat
     if (n.chatId) {
-      setActiveChat(n.chatId);
+      const chatExists = useChatStore.getState().chats.some((c) => c.id === n.chatId);
+      if (chatExists) {
+        setActiveChat(n.chatId);
+      } else {
+        useUiStore.getState().addToast({
+          title: 'Chat not found',
+          message: 'This conversation has been deleted or is no longer available.',
+          type: 'error'
+        });
+        // We don't return here, we still want to mark it as read
+      }
     }
     // 2) Mark this notification as read
     if (!n.read) {
       markRead(n.id);
     }
-    // 3) Switch panel back to chats
-    setActivePanel('chats');
+    // 3) Switch panel back to chats (if chat exists)
+    const chatExists = n.chatId ? useChatStore.getState().chats.some((c) => c.id === n.chatId) : true;
+    if (chatExists) {
+       setActivePanel('chats');
+    }
   };
 
   if (loading && notifications.length === 0) {
