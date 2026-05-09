@@ -69,7 +69,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
 
     socket.on('connect_error', (err) => {
       console.error('[Socket] ❌ Connection error:', err.message);
-      
+
       // If auth error, try to refresh token
       if (err.message.includes('Authentication error')) {
         console.warn('[Socket] Auth error, attempting refresh...');
@@ -108,7 +108,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       if (chat) {
         // Update the last message in the sidebar
         updateChat({ ...chat, messages: [message] } as any);
-        
+
         // Increment unread if not active chat and not from current user
         const userId = useAuthStore.getState().user?.id;
         if (message.chatId !== activeChatId && message.senderId !== userId) {
@@ -134,7 +134,7 @@ export const useSocketStore = create<SocketState>((set, get) => ({
     socket.on('messages:read', (data: { chatId: string; readerId: string }) => {
       console.log('[Socket] ✅ messages:read', data.chatId);
       useMessageStore.getState().markAsRead(data.chatId);
-      
+
       // If we are the reader, reset unread count
       const userId = useAuthStore.getState().user?.id;
       if (data.readerId === userId) {
@@ -164,17 +164,42 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       }
     });
 
+    socket.on('chat:deleted', ({ chatId }) => {
+      console.log('[Socket] 🗑️ chat:deleted', chatId);
+      const { chats, setChats, activeChatId, setActiveChat } = useChatStore.getState();
+      setChats(chats.filter((c) => c.id !== chatId));
+      if (activeChatId === chatId) {
+        setActiveChat(null as any);
+      }
+    });
+
     // ── Слушаем уведомления ──
     socket.on('notification:new', (notification) => {
       console.log('[Socket] 🔔 notification:new', notification.id);
       useNotificationStore.getState().addNotification(notification);
 
+      // ── In-App Toast ──
+      useUiStore.getState().addToast({
+        title: notification.title,
+        message: notification.body,
+        type: 'message',
+        chatId: notification.chatId,
+      });
+
       // ── Browser Notification ──
       if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'granted') {
+          // Play sound ONLY if it's not a call (to avoid overlaps)
+          if (notification.type !== 'call') {
+            const audio = new Audio('/notification.mp3');
+            audio.volume = 0.5;
+            audio.play().catch(() => {}); // Catch if browser blocks autoplay
+          }
+
           const n = new Notification(notification.title, {
             body: notification.body,
             icon: '/logo.png',
+            silent: false, // Let the OS play its sound too
           });
           n.onclick = () => {
             window.focus();
@@ -189,9 +214,11 @@ export const useSocketStore = create<SocketState>((set, get) => ({
       }
     });
 
-    // Request notification permission initially
-    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
-      Notification.requestPermission();
+    // Request notification permission initially on connect
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
     }
 
     // ── Слушаем статус пользователя ──

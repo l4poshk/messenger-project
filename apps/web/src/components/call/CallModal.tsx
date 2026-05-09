@@ -120,7 +120,33 @@ export default function CallModal() {
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const pcRefs = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const ringingAudioRef = useRef<HTMLAudioElement | null>(null);
   const isInitializing = useRef(false);
+
+  // ── Ringtone Logic ──
+  useEffect(() => {
+    if (status === 'incoming') {
+      // Create and play ringtone (Using local file from public folder)
+      const audio = new Audio('/call_ringing_beat.mp3');
+      audio.loop = true;
+      audio.volume = 0.5;
+      ringingAudioRef.current = audio;
+      audio.play().catch(err => console.warn('[Call] Ringtone blocked by browser:', err));
+    } else {
+      // Stop ringtone if it was playing
+      if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+        ringingAudioRef.current = null;
+      }
+    }
+    
+    return () => {
+      if (ringingAudioRef.current) {
+        ringingAudioRef.current.pause();
+        ringingAudioRef.current = null;
+      }
+    };
+  }, [status]);
 
   // Audio Context Helper
   const resumeAudio = useCallback(async () => {

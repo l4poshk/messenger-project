@@ -109,7 +109,7 @@ export function initSocket(server: HttpServer) {
           where: { chatId: data.chatId },
           select: { userId: true }
         });
-        
+
         members.forEach(m => {
           // We already emitted to the chat room, but users might not be joined if chat is inactive
           if (m.userId !== userId) {
@@ -124,7 +124,11 @@ export function initSocket(server: HttpServer) {
             senderId: userId,
             type: 'message',
             title: username,
-            body: data.type === 'TEXT' ? data.content : `Sent a ${data.type.toLowerCase()}`,
+            body: 
+              data.type === 'TEXT' ? data.content :
+              data.type === 'AUDIO' ? '🎤 Voice message' :
+              data.type === 'IMAGE' ? '📷 Photo' :
+              data.type === 'VIDEO' ? '🎥 Video' : '📁 File',
           });
         });
       } catch (err) {
@@ -168,8 +172,8 @@ export function initSocket(server: HttpServer) {
 
         const updated = await prisma.message.update({
           where: { id: messageId },
-          data: { 
-            content, 
+          data: {
+            content,
             isEdited: true,
             editedAt: new Date()
           },
@@ -251,10 +255,10 @@ export function initSocket(server: HttpServer) {
     socket.on('call:join', async (payload: { chatId: string }) => {
       const { chatId } = payload;
       const key = `call:${chatId}:participants`;
-      
+
       await cleanupZombies(chatId);
       const participants = await redis.zrange(key, 0, -1);
-      
+
       if (participants.length >= 4 && !participants.includes(userId)) {
         socket.emit('call:error', { message: 'Call is full (max 4)' });
         return;
@@ -263,7 +267,7 @@ export function initSocket(server: HttpServer) {
       await redis.zadd(key, Date.now(), userId);
       await redis.expire(key, 60); // Safety expiry
       joinedCalls.add(chatId);
-      
+
       socket.join(`call:${chatId}`);
       const otherUsers = participants.filter(id => id !== userId);
       socket.emit('call:participants', { participants: otherUsers });
@@ -305,7 +309,7 @@ export function initSocket(server: HttpServer) {
       const key = `call:${p.chatId}:participants`;
       await redis.zrem(key, userId);
       joinedCalls.delete(p.chatId);
-      
+
       socket.leave(`call:${p.chatId}`);
       socket.to(`call:${p.chatId}`).emit('call:user-left', { userId });
     });
@@ -316,7 +320,7 @@ export function initSocket(server: HttpServer) {
         where: { chatId: p.chatId },
         select: { userId: true },
       });
-      
+
       logger.info(`Found ${members.length} members to notify`);
       members.forEach((m) => {
         if (m.userId !== userId) {

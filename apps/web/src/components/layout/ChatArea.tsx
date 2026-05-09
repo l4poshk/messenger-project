@@ -47,6 +47,8 @@ export default function ChatArea() {
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [isRecordingAudio, setIsRecordingAudio] = useState(false);
+
   const isSupergroup = (activeChat as any)?.type === 'SUPERGROUP';
   const myMembership = (activeChat as any)?.members?.find(
     (m: any) => m.userId === userId
@@ -350,6 +352,17 @@ export default function ChatArea() {
   return (
     <main className="flex-1 flex flex-col bg-primary min-w-0">
       <header className="h-14 border-b border-border flex items-center px-4 shrink-0 bg-primary/80 backdrop-blur-sm z-10">
+        {/* Back Button (Mobile only) */}
+        <button
+          onClick={() => useChatStore.getState().setActiveChat(null as any)}
+          className="mr-2 p-2 -ml-2 text-text-muted hover:text-text-primary md:hidden"
+          title="Back to chats"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+        </button>
         <div
           onClick={() => setShowInfo(!showInfo)}
           className="flex items-center gap-3 flex-1 cursor-pointer hover:opacity-80 transition-opacity"
@@ -446,16 +459,25 @@ export default function ChatArea() {
 
       <div className="px-4 py-3 border-t border-border bg-primary">
         <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-          <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
-          <button type="button" onClick={() => fileInputRef.current?.click()} className="w-10 h-10 rounded-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-elevated transition-colors shrink-0">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
-          </button>
-          <input type="text" value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={handleKeyDown} placeholder={activeTopicId ? 'Message in #topic...' : 'Type a message...'} className="flex-1 bg-elevated border-0 rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30" />
+          {!isRecordingAudio && (
+            <>
+              <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileSelect} />
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="w-10 h-10 rounded-full flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-elevated transition-colors shrink-0">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48" /></svg>
+              </button>
+              <input type="text" value={content} onChange={(e) => setContent(e.target.value)} onKeyDown={handleKeyDown} placeholder={activeTopicId ? 'Message in #topic...' : 'Type a message...'} className="flex-1 bg-elevated border-0 rounded-xl px-4 py-2.5 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30" />
+            </>
+          )}
+          
           {!content.trim() && !pendingFile ? (
-            <VoiceRecorder onSend={(fileUrl, dur, wf) => {
-              if (!activeChatId || !socket?.connected) return;
-              socket.emit('message:send', { chatId: activeChatId, content: '', type: 'AUDIO', fileUrl, duration: dur, waveform: wf, ...(activeTopicId ? { topicId: activeTopicId } : {}), });
-            }} disabled={!socket?.connected} />
+            <VoiceRecorder 
+              onRecordingChange={setIsRecordingAudio}
+              onSend={(fileUrl, dur, wf) => {
+                if (!activeChatId || !socket?.connected) return;
+                socket.emit('message:send', { chatId: activeChatId, content: '', type: 'AUDIO', fileUrl, duration: dur, waveform: wf, ...(activeTopicId ? { topicId: activeTopicId } : {}), });
+              }} 
+              disabled={!socket?.connected} 
+            />
           ) : (
             <button type="submit" disabled={(!content.trim() && !pendingFile) || uploading} className="w-10 h-10 rounded-full bg-accent text-accent-dark flex items-center justify-center transition-all hover:bg-accent-hover disabled:opacity-50 disabled:grayscale shrink-0">
               {uploading ? <div className="w-4 h-4 border-2 border-accent-dark border-t-transparent rounded-full animate-spin" /> : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></svg>}

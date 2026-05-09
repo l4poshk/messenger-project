@@ -28,6 +28,13 @@ export default function IconNav() {
   // Avoid hydration mismatch
   useEffect(() => setMounted(true), []);
 
+  // Fetch initial notifications on mount
+  useEffect(() => {
+    if (user) {
+      useNotificationStore.getState().fetchNotifications();
+    }
+  }, [user]);
+
   const handleLogout = async () => {
     if (refreshToken) {
       await api.post('/auth/logout', { refreshToken });

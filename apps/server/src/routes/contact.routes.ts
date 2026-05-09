@@ -99,13 +99,38 @@ contactRouter.post('/', async (req, res, next) => {
 // DELETE /api/contacts/:contactId — remove a contact
 contactRouter.delete('/:contactId', async (req, res, next) => {
   try {
+    const ownerId = req.user!.userId;
+    const contactId = req.params.contactId;
+
+    // 1. Delete the contact record
     await prisma.contact.deleteMany({
-      where: {
-        ownerId: req.user!.userId,
-        contactId: req.params.contactId,
-      },
+      where: { ownerId, contactId },
     });
-    res.json({ data: { success: true }, error: null });
+
+    // 2. Find and delete the DIRECT chat between these two users
+    const directChat = await prisma.chat.findFirst({
+      where: {
+        type: 'DIRECT',
+        AND: [
+          { members: { some: { userId: ownerId } } },
+          { members: { some: { userId: contactId } } }
+        ]
+      }
+    });
+
+    if (directChat) {
+      // Deleting the chat will cascade delete members and messages (based on schema)
+      await prisma.chat.delete({ where: { id: directChat.id } });
+
+      // 3. Notify both users via Socket to remove the chat from their lists
+      const { getIO } = require('../lib/socket');
+      const io = getIO();
+      if (io) {
+        io.to(`user:${ownerId}`).to(`user:${contactId}`).emit('chat:deleted', { chatId: directChat.id });
+      }
+    }
+
+    res.json({ data: { success: true, chatId: directChat?.id }, error: null });
   } catch (err) {
     next(err);
   }

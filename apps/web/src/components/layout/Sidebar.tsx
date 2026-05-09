@@ -24,6 +24,7 @@ export default function Sidebar() {
   const setActiveChat = useChatStore((s) => s.setActiveChat);
   const openModal = useUiStore((s) => s.openModal);
   const activePanel = useUiStore((s) => s.activePanel);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -38,6 +39,16 @@ export default function Sidebar() {
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  const requestNotificationPermission = () => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().then(permission => {
+          console.log('[Notifications] Permission:', permission);
+        });
+      }
+    }
+  };
 
   const getChatName = useCallback((chat: any) => {
     if (chat.type === 'DIRECT') {
@@ -63,17 +74,30 @@ export default function Sidebar() {
     settings: 'Settings',
   };
 
-  // ── Sort chats by last activity ──
-  const sortedChatList = useMemo(() => {
-    return [...chats].sort((a: any, b: any) => {
+  // ── Filter & Sort chats ──
+  const filteredChatList = useMemo(() => {
+    let list = [...chats];
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((chat) => {
+        const name = getChatName(chat).toLowerCase();
+        return name.includes(q);
+      });
+    }
+
+    return list.sort((a: any, b: any) => {
       const aTime = new Date(a.messages?.[0]?.createdAt || a.createdAt).getTime();
       const bTime = new Date(b.messages?.[0]?.createdAt || b.createdAt).getTime();
       return bTime - aTime;
     });
-  }, [chats]);
+  }, [chats, searchQuery, getChatName]);
 
   return (
-    <aside className="flex flex-col w-sidebar bg-secondary border-r border-border shrink-0">
+    <aside 
+      onClick={requestNotificationPermission}
+      className="flex flex-col flex-1 md:w-sidebar bg-secondary border-r border-border shrink-0"
+    >
       {/* ── Header ── */}
       <div className="flex items-center justify-between px-4 h-14 border-b border-border shrink-0">
         <h2 className="text-sm font-semibold text-text-primary">{panelTitles[activePanel]}</h2>
@@ -97,7 +121,13 @@ export default function Sidebar() {
             <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-text-hint" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input type="text" placeholder={`Search ${activePanel}...`} className="w-full rounded-lg bg-elevated border-0 pl-9 pr-3 py-2 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30" />
+            <input
+              type="text"
+              placeholder={`Search ${activePanel}...`}
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-lg bg-elevated border-0 pl-9 pr-3 py-2 text-sm text-text-primary placeholder-text-hint outline-none focus:ring-1 focus:ring-accent/30"
+            />
           </div>
         </div>
       )}
@@ -106,7 +136,7 @@ export default function Sidebar() {
       <div className="flex-1 overflow-y-auto no-scrollbar">
         {activePanel === 'chats' && (
           <ChatListPanel
-            chats={sortedChatList}
+            chats={filteredChatList}
             activeChatId={activeChatId}
             setActiveChat={setActiveChat}
             getChatName={getChatName}
@@ -124,10 +154,10 @@ export default function Sidebar() {
           <div className="relative shrink-0">
             <div className="w-9 h-9 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs font-bold uppercase overflow-hidden">
               {user?.avatar ? (
-                <img 
-                  src={user.avatar} 
-                  alt={user.username} 
-                  className="w-full h-full object-cover" 
+                <img
+                  src={user.avatar}
+                  alt={user.username}
+                  className="w-full h-full object-cover"
                 />
               ) : (
                 user?.username?.charAt(0)
@@ -171,9 +201,8 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getCha
         <button
           key={chat.id}
           onClick={() => setActiveChat(chat.id)}
-          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${
-            activeChatId === chat.id ? 'bg-elevated' : 'hover:bg-elevated/50'
-          }`}
+          className={`w-full flex items-center gap-3 px-3 py-3 rounded-xl transition-all ${activeChatId === chat.id ? 'bg-elevated' : 'hover:bg-elevated/50'
+            }`}
         >
           <div className="relative shrink-0">
             <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent text-sm font-bold uppercase overflow-hidden border border-white/5">
@@ -183,18 +212,17 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getCha
                 getChatName(chat).charAt(0)
               )}
             </div>
-            
+
             {/* Online Status Dot (for DIRECT chats) */}
             {(() => {
               if (chat.type !== 'DIRECT') return null;
               const other = chat.members?.find((m: any) => m.userId !== userId)?.user;
               if (!other) return null;
-              
-              const isOnline = other.status === 'ONLINE' || 
-                (other.lastSeen && Date.now() - new Date(other.lastSeen).getTime() < 5 * 60 * 1000);
-              
+
+              const isOnline = other.status === 'ONLINE';
+
               if (!isOnline) return null;
-              
+
               return (
                 <span className="absolute bottom-0 right-0 w-3 h-3 bg-accent border-2 border-primary rounded-full" />
               );
@@ -211,7 +239,15 @@ function ChatListPanel({ chats, activeChatId, setActiveChat, getChatName, getCha
             </div>
             <div className="flex items-center justify-between gap-2 mt-0.5">
               <p className="text-xs text-text-muted truncate flex-1">
-                {chat.messages?.[0]?.content || 'No messages yet'}
+                {(() => {
+                  const lastMsg = chat.messages?.[0];
+                  if (!lastMsg) return 'No messages yet';
+                  if (lastMsg.type === 'TEXT') return lastMsg.content;
+                  if (lastMsg.type === 'AUDIO') return '🎤 Voice message';
+                  if (lastMsg.type === 'IMAGE') return '📷 Photo';
+                  if (lastMsg.type === 'VIDEO') return '🎥 Video';
+                  return '📁 File';
+                })()}
               </p>
               {chat.unreadCount > 0 && (
                 <span className="min-w-[18px] h-[18px] flex items-center justify-center bg-accent text-accent-dark text-[10px] font-bold rounded-full px-1 animate-in zoom-in-50 duration-200">
@@ -362,9 +398,8 @@ function ContactsPanel({ userId }: { userId?: string }) {
                   <div className="w-10 h-10 rounded-full bg-accent/10 flex items-center justify-center text-accent font-bold text-xs uppercase">
                     {contact.username?.charAt(0) || '?'}
                   </div>
-                  <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary ${
-                    isOnline ? 'bg-accent' : 'bg-text-hint'
-                  }`} />
+                  <span className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full border-2 border-secondary ${isOnline ? 'bg-accent' : 'bg-text-hint'
+                    }`} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-text-primary truncate">{contact.username}</p>
@@ -465,16 +500,14 @@ function NotificationsPanel() {
           <button
             key={n.id}
             onClick={() => handleClick(n)}
-            className={`w-full text-left px-3 py-3 rounded-xl transition-colors cursor-pointer hover:bg-elevated ${
-              n.read ? 'opacity-60' : 'bg-elevated/50'
-            }`}
+            className={`w-full text-left px-3 py-3 rounded-xl transition-colors cursor-pointer hover:bg-elevated ${n.read ? 'opacity-60' : 'bg-elevated/50'
+              }`}
           >
             <div className="flex items-start gap-3">
-              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                n.type === 'message' ? 'bg-accent/10 text-accent' :
-                n.type === 'call' ? 'bg-info/10 text-info' :
-                'bg-warning/10 text-warning'
-              }`}>
+              <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${n.type === 'message' ? 'bg-accent/10 text-accent' :
+                  n.type === 'call' ? 'bg-info/10 text-info' :
+                    'bg-warning/10 text-warning'
+                }`}>
                 {n.type === 'message' ? (
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
@@ -622,7 +655,7 @@ function SettingsPanel() {
                 {user?.username?.charAt(0) || '?'}
               </div>
             )}
-            
+
             {/* Overlay */}
             <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -724,12 +757,10 @@ function SettingsPanel() {
               </div>
               <span className="text-sm text-text-primary">Dark mode</span>
             </div>
-            <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${
-              mounted && resolvedTheme === 'dark' ? 'bg-accent' : 'bg-text-hint/30'
-            }`}>
-              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-                mounted && resolvedTheme === 'dark' ? 'translate-x-4' : 'translate-x-0'
-              }`} />
+            <div className={`w-10 h-6 rounded-full transition-colors flex items-center px-1 ${mounted && resolvedTheme === 'dark' ? 'bg-accent' : 'bg-text-hint/30'
+              }`}>
+              <div className={`w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${mounted && resolvedTheme === 'dark' ? 'translate-x-4' : 'translate-x-0'
+                }`} />
             </div>
           </button>
         </div>

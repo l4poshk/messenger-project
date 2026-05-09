@@ -2,42 +2,47 @@
 
 // ──────────────────────────────────────────────
 // Home page — 3-panel messenger layout
-// Protected by Next.js middleware (redirects to /login)
 // ──────────────────────────────────────────────
 
 import { useEffect } from 'react';
 import IconNav from '@/components/layout/IconNav';
 import Sidebar from '@/components/layout/Sidebar';
 import ChatArea from '@/components/layout/ChatArea';
+import ToastContainer from '../components/layout/ToastContainer';
 import NewChatModal from '@/components/modals/NewChatModal';
 import CallModal from '@/components/call/CallModal';
 import { useSocketStore } from '@/store/socketStore';
+import { useChatStore } from '@/store/chatStore';
 
 export default function HomePage() {
-  useEffect(() => {
-    // Connect socket on mount
-    useSocketStore.getState().connect();
+  const activeChatId = useChatStore((s) => s.activeChatId);
 
+  useEffect(() => {
+    useSocketStore.getState().connect();
     return () => {
-      // Disconnect on unmount (page navigation away)
       useSocketStore.getState().disconnect();
     };
   }, []);
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      {/* Panel 1: Icon Nav (56px) */}
-      <IconNav />
+    <div className="flex h-screen overflow-hidden bg-primary">
+      {/* Panel 1 & 2: Icon Nav + Sidebar */}
+      {/* On mobile: visible only if NO chat is selected */}
+      <div className={`flex h-full shrink-0 ${activeChatId ? 'hidden md:flex' : 'flex flex-1 md:flex-none md:w-auto'}`}>
+        <IconNav />
+        <Sidebar />
+      </div>
 
-      {/* Panel 2: Chat List Sidebar (280px) */}
-      <Sidebar />
+      {/* Panel 3: Chat Area */}
+      {/* On mobile: visible only if A chat is selected */}
+      <div className={`flex-1 h-full min-w-0 ${activeChatId ? 'flex' : 'hidden md:flex'}`}>
+        <ChatArea />
+      </div>
 
-      {/* Panel 3: Chat Area (fills remaining) */}
-      <ChatArea />
-
-      {/* Modals */}
+      {/* Global Overlays */}
       <NewChatModal />
       <CallModal />
+      <ToastContainer />
     </div>
   );
 }

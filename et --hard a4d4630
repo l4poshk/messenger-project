@@ -1,0 +1,37 @@
+[33m58b7b9b[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m fix: exorcised R2 dead code and fixed typescript exports
+[33ma4d4630[m fix
+[33m80e6360[m адпативка
+[33m369e5a8[m fix
+[33m639ac93[m final
+[33m36af26b[m fix
+[33m2e18c29[m fix: typescript error in auth routes
+[33m657941f[m fix: update server build and start scripts for prisma
+[33m5c9fcb2[m fff
+[33m9083fea[m tg
+[33m9d13d6c[m ВСЕ АХУЕННО!!!!!!
+[33m58fbc9b[m fixed all
+[33m409424a[m fix
+[33m5593236[m fff
+[33mb484bb1[m fff
+[33me3a507c[m fff
+[33m7dd1911[m fix: server tsconfig paths for deployment
+[33md0c6760[m  фикс
+[33m5ad7ab8[m фикс
+[33ma2ac8af[m fix: wrap LoginForm in Suspense to fix build error
+[33m4300e69[m исправил package
+[33m12069ea[m Подготовка к датабазе
+[33m0bda0a0[m пытаюсь починить войс
+[33m60f0c3f[m update
+[33mac4a3d9[m update
+[33md0af307[m ff
+[33mbcd5ab8[m fff
+[33me0dd217[m ff
+[33m695c05c[m update
+[33me2f5cc1[m phone
+[33ma349e56[m add voice
+[33me55fd4a[m update
+[33m87ad389[m add chats
+[33m4c1b30b[m update
+[33meb268f0[m fix: resolve ts node types in monorepo
+[33m4e4d246[m feat: backend infrastructure is fully operational
+[33meb85bac[m first commit step 1

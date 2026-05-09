@@ -46,9 +46,21 @@ export default function NewChatModal() {
   }, [isOpen, activeModal, fetchContacts]);
 
   // Filter contacts locally
-  const filteredContacts = contacts.filter((c) =>
-    c.username.toLowerCase().includes(filter.toLowerCase())
-  );
+  const filteredContacts = contacts.filter((c) => {
+    const matchesFilter = c.username.toLowerCase().includes(filter.toLowerCase());
+    if (!matchesFilter) return false;
+
+    // In 'direct' mode, hide contacts that already have a DIRECT chat
+    if (mode === 'direct') {
+      const hasDirect = chats.some((chat: any) => 
+        chat.type === 'DIRECT' && 
+        chat.members?.some((m: any) => m.userId === c.id)
+      );
+      return !hasDirect;
+    }
+
+    return true;
+  });
 
   const toggleSelect = (user: ContactUser) => {
     if (mode === 'direct') {

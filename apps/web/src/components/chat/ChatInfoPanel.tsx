@@ -178,7 +178,7 @@ export default function ChatInfoPanel({ chat, onClose }: ChatInfoPanelProps) {
   );
 
   return (
-    <div className="absolute top-0 right-0 w-80 h-full bg-secondary border-l border-border shadow-2xl flex flex-col z-50 animate-slide-right">
+    <div className="absolute top-0 right-0 w-full md:w-80 h-full bg-secondary border-l border-border shadow-2xl flex flex-col z-50 animate-slide-right">
       {/* Header */}
       <div className="h-14 flex items-center justify-between px-4 border-b border-border bg-primary/50">
         <h3 className="font-semibold text-text-primary text-sm">

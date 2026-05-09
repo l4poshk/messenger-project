@@ -13,10 +13,11 @@ const WAVEFORM_BARS = 40; // Number of bars to generate for Telegram-like UI
 
 interface VoiceRecorderProps {
   onSend: (fileUrl: string, duration: number, waveform: number[]) => void;
+  onRecordingChange?: (isRecording: boolean) => void;
   disabled?: boolean;
 }
 
-export default function VoiceRecorder({ onSend, disabled }: VoiceRecorderProps) {
+export default function VoiceRecorder({ onSend, onRecordingChange, disabled }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
   const [duration, setDuration] = useState(0);
   const [uploading, setUploading] = useState(false);
@@ -192,18 +193,20 @@ export default function VoiceRecorder({ onSend, disabled }: VoiceRecorderProps) 
 
       mediaRecorder.start(1000);
       setIsRecording(true);
+      onRecordingChange?.(true);
     } catch (err) {
       console.error('[Voice] Mic error:', err);
       alert('Microphone access is required.');
     }
-  }, [duration, onSend]);
+  }, [duration, onSend, onRecordingChange]);
 
   const stopRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
     setIsRecording(false);
-  }, []);
+    onRecordingChange?.(false);
+  }, [onRecordingChange]);
 
   const cancelRecording = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
@@ -220,7 +223,8 @@ export default function VoiceRecorder({ onSend, disabled }: VoiceRecorderProps) 
     rawSamplesRef.current = [];
     setIsRecording(false);
     setIsSilent(false);
-  }, []);
+    onRecordingChange?.(false);
+  }, [onRecordingChange]);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);

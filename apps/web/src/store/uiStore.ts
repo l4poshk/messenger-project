@@ -1,5 +1,5 @@
 // ──────────────────────────────────────────────
-// UI Store — sidebar, modals, theme
+// UI Store — sidebar, modals, theme, toasts
 // ──────────────────────────────────────────────
 
 import { create } from 'zustand';
@@ -15,6 +15,16 @@ type ActiveModal =
   | 'settings'
   | 'image-lightbox';
 
+export type ToastType = 'info' | 'success' | 'error' | 'message';
+
+export interface Toast {
+  id: string;
+  title: string;
+  message: string;
+  type: ToastType;
+  chatId?: string;
+}
+
 interface UiState {
   // ── State ──
   theme: Theme;
@@ -22,6 +32,7 @@ interface UiState {
   sidebarOpen: boolean;
   activeModal: ActiveModal;
   lightboxImage: string | null;
+  toasts: Toast[];
 
   // ── Actions ──
   setTheme: (theme: Theme) => void;
@@ -33,6 +44,8 @@ interface UiState {
   closeModal: () => void;
   openLightbox: (imageUrl: string) => void;
   closeLightbox: () => void;
+  addToast: (toast: Omit<Toast, 'id'>) => void;
+  removeToast: (id: string) => void;
 }
 
 export const useUiStore = create<UiState>()(
@@ -44,11 +57,11 @@ export const useUiStore = create<UiState>()(
       sidebarOpen: true,
       activeModal: null,
       lightboxImage: null,
+      toasts: [],
 
       // ── Actions ──
       setTheme: (theme) => {
         set({ theme });
-        // Update <html> class for Tailwind dark mode
         if (typeof document !== 'undefined') {
           document.documentElement.classList.toggle('dark', theme === 'dark');
           document.documentElement.classList.toggle('light', theme === 'light');
@@ -62,9 +75,7 @@ export const useUiStore = create<UiState>()(
 
       setSidebarOpen: (sidebarOpen) => set({ sidebarOpen }),
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-
       setActivePanel: (activePanel) => set({ activePanel }),
-
       openModal: (activeModal) => set({ activeModal }),
       closeModal: () => set({ activeModal: null }),
 
@@ -72,6 +83,16 @@ export const useUiStore = create<UiState>()(
         set({ activeModal: 'image-lightbox', lightboxImage }),
       closeLightbox: () =>
         set({ activeModal: null, lightboxImage: null }),
+
+      addToast: (toast) => {
+        const id = Math.random().toString(36).substring(2, 9);
+        set((state) => ({ toasts: [...state.toasts, { ...toast, id }] }));
+        setTimeout(() => {
+          set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) }));
+        }, 5000);
+      },
+
+      removeToast: (id) => set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
     }),
     {
       name: 'messenger-ui',

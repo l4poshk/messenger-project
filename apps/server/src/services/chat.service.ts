@@ -188,18 +188,34 @@ export async function addMember(chatId: string, userId: string, targetUserId: st
 // ── Удалить участника ──
 
 export async function removeMember(chatId: string, userId: string, targetUserId: string) {
+  console.log(`[ChatService] 🚪 Attempting to remove member. Chat: ${chatId}, Requester: ${userId}, Target: ${targetUserId}`);
+  
   const requester = await assertMember(chatId, userId);
   const target = await assertMember(chatId, targetUserId);
 
-  // 1. Абсолютный иммунитет: Создателя удалить невозможно
-  if (target.role === 'CREATOR') {
+  console.log(`[ChatService] Roles found - Requester: ${requester.role}, Target: ${target.role}`);
+
+  // 1. Абсолютный иммунитет: Создателя удалить невозможно (только если это не DIRECT чат, см. ниже)
+  if (target.role === 'CREATOR' && targetUserId !== userId) {
     throw new AppError(403, 'Cannot kick the chat creator');
   }
 
   // 2. Выход из чата (самоудаление)
   if (targetUserId === userId) {
+    const chat = await prisma.chat.findUnique({ where: { id: chatId } });
+    
+    // Если Создатель хочет выйти — мы просто удаляем весь чат целиком
     if (requester.role === 'CREATOR') {
-      throw new AppError(400, 'Creator cannot leave. Delete the chat or transfer rights first.');
+      console.log(`[ChatService] 🗑️ Creator is leaving, deleting entire chat: ${chatId} (Type: ${chat?.type})`);
+      await prisma.chat.delete({ where: { id: chatId } });
+      return { removed: true, chatDeleted: true };
+    }
+
+    // Если обычный участник выходит из личного чата — тоже удаляем (так как DIRECT это только 2 человека)
+    if (chat?.type === 'DIRECT') {
+      console.log(`[ChatService] 🗑️ Member left DIRECT chat, deleting it: ${chatId}`);
+      await prisma.chat.delete({ where: { id: chatId } });
+      return { removed: true, chatDeleted: true };
     }
   } else {
     // 3. Кик другого пользователя: только CREATOR или ADMIN

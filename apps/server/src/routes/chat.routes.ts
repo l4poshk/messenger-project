@@ -70,6 +70,18 @@ chatRouter.delete('/:id/members/:userId', async (req, res, next) => {
     const result = await chatService.removeMember(
       req.params.id, req.user!.userId, req.params.userId
     );
+
+    // Если чат был удален (для DIRECT), уведомляем участников
+    if ((result as any).chatDeleted) {
+      getIO().to(`chat:${req.params.id}`).emit('chat:deleted', { chatId: req.params.id });
+    } else {
+      // Иначе уведомляем, что участник просто вышел
+      getIO().to(`chat:${req.params.id}`).emit('chat:member_left', { 
+        chatId: req.params.id, 
+        userId: req.params.userId 
+      });
+    }
+
     res.json({ data: result, error: null });
   } catch (err) { next(err); }
 });
@@ -168,6 +180,23 @@ chatRouter.post('/:id/messages', upload.single('file'), async (req, res, next) =
     });
 
     getIO().to(`chat:${chatId}`).emit('message:new', message);
+
+    // ── Notify Chat Members ──
+    import('../services/notification.service').then(({ notifyChatMembers }) => {
+      notifyChatMembers({
+        chatId,
+        senderId: req.user!.userId,
+        type: 'message',
+        title: req.user!.username,
+        body: (() => {
+          if (messageType === 'TEXT') return content || '';
+          if (messageType === 'AUDIO') return '🎤 Voice message';
+          if (messageType === 'IMAGE') return '📷 Photo';
+          if (messageType === 'VIDEO') return '🎥 Video';
+          return '📁 File';
+        })(),
+      });
+    });
 
     res.status(201).json({ data: message, error: null });
   } catch (err) { next(err); }
